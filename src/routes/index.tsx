@@ -87,31 +87,58 @@ const SECTIONS: { title: string; tools: Tool[] }[] = [
   },
 ];
 
-function Rail() {
-  const bottom = [Smartphone, Send, LifeBuoy, User];
+function Rail({
+  folderOpen,
+  onFolder,
+  onPlus,
+  onInvite,
+}: {
+  folderOpen: boolean;
+  onFolder: () => void;
+  onPlus: () => void;
+  onInvite: () => void;
+}) {
   return (
-    <aside className="fixed inset-y-0 left-0 z-20 hidden w-[60px] flex-col items-center justify-between overflow-hidden bg-black py-3.5 md:flex">
+    <aside className="z-20 hidden w-[60px] shrink-0 flex-col items-center justify-between overflow-hidden bg-black py-3.5 md:flex">
       <div className="flex w-full flex-col items-center">
         <button className="flex size-10 items-center justify-center rounded-[14px] bg-secondary text-foreground transition-colors hover:bg-card-hover">
           <Home size={18} />
         </button>
         <div className="my-3 h-px w-6 bg-border" />
-        <button className="flex size-10 items-center justify-center rounded-[14px] bg-secondary/70 text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground">
+        <button
+          onClick={onFolder}
+          aria-label="My folder"
+          className={`flex size-10 items-center justify-center rounded-[14px] transition-colors hover:bg-card-hover hover:text-foreground ${
+            folderOpen ? "bg-secondary text-foreground" : "bg-secondary/70 text-muted-foreground"
+          }`}
+        >
           <FolderOpen size={18} />
         </button>
-        <button className="mt-3 flex size-10 items-center justify-center rounded-[14px] text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground">
+        <button
+          onClick={onPlus}
+          aria-label="Add"
+          className="mt-3 flex size-10 items-center justify-center rounded-[14px] text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+        >
           <Plus size={19} />
         </button>
       </div>
       <div className="flex flex-col items-center gap-5">
-        {bottom.map((Icon, i) => (
-          <button
-            key={i}
-            className="text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <Icon size={18} />
-          </button>
-        ))}
+        <button className="text-muted-foreground transition-colors hover:text-foreground">
+          <Smartphone size={18} />
+        </button>
+        <button
+          onClick={onInvite}
+          aria-label="Invite friends"
+          className="text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <Send size={18} />
+        </button>
+        <button className="text-muted-foreground transition-colors hover:text-foreground">
+          <LifeBuoy size={18} />
+        </button>
+        <button className="text-muted-foreground transition-colors hover:text-foreground">
+          <User size={18} />
+        </button>
         <div className="rounded-[14px] bg-gradient-to-br from-[#ff8a3d] via-[#7c5cff] to-[#38bdf8] p-[1.5px]">
           <div className="flex flex-col items-center gap-0.5 rounded-[13px] bg-card px-2 py-1.5 text-[10px] font-semibold text-foreground">
             <ArrowUpCircle size={15} />
@@ -122,6 +149,7 @@ function Rail() {
     </aside>
   );
 }
+
 
 
 function Hub({ onOpen }: { onOpen: (id: ToolId) => void }) {
