@@ -17,7 +17,7 @@ import {
   Plus,
   Send,
   Smartphone,
-  Sparkles,
+  ArrowUpCircle,
   User,
   FileText,
   type LucideIcon,
@@ -88,37 +88,41 @@ const SECTIONS: { title: string; tools: Tool[] }[] = [
 ];
 
 function Rail() {
-  const items = [Home, FolderOpen, Plus];
   const bottom = [Smartphone, Send, LifeBuoy, User];
   return (
-    <aside className="hidden w-[72px] shrink-0 flex-col items-center justify-between border-r border-border py-4 md:flex">
-      <div className="flex flex-col items-center gap-3">
-        {items.map((Icon, i) => (
-          <button
-            key={i}
-            className="flex size-11 items-center justify-center rounded-xl bg-secondary/70 text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground"
-          >
-            <Icon size={19} />
-          </button>
-        ))}
+    <aside className="fixed inset-y-0 left-0 z-20 hidden w-[60px] flex-col items-center justify-between overflow-hidden bg-black py-3.5 md:flex">
+      <div className="flex w-full flex-col items-center">
+        <button className="flex size-10 items-center justify-center rounded-[14px] bg-secondary text-foreground transition-colors hover:bg-card-hover">
+          <Home size={18} />
+        </button>
+        <div className="my-3 h-px w-6 bg-border" />
+        <button className="flex size-10 items-center justify-center rounded-[14px] bg-secondary/70 text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground">
+          <FolderOpen size={18} />
+        </button>
+        <button className="mt-3 flex size-10 items-center justify-center rounded-[14px] text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground">
+          <Plus size={19} />
+        </button>
       </div>
-      <div className="flex flex-col items-center gap-4">
+      <div className="flex flex-col items-center gap-5">
         {bottom.map((Icon, i) => (
           <button
             key={i}
             className="text-muted-foreground transition-colors hover:text-foreground"
           >
-            <Icon size={19} />
+            <Icon size={18} />
           </button>
         ))}
-        <div className="flex flex-col items-center rounded-xl border border-border bg-card px-3 py-2 text-[11px] font-semibold text-foreground">
-          <Sparkles size={14} />
-          Pro
+        <div className="rounded-[14px] bg-gradient-to-br from-[#ff8a3d] via-[#7c5cff] to-[#38bdf8] p-[1.5px]">
+          <div className="flex flex-col items-center gap-0.5 rounded-[13px] bg-card px-2 py-1.5 text-[10px] font-semibold text-foreground">
+            <ArrowUpCircle size={15} />
+            Pro
+          </div>
         </div>
       </div>
     </aside>
   );
 }
+
 
 function Hub({ onOpen }: { onOpen: (id: ToolId) => void }) {
   return (
@@ -187,9 +191,9 @@ function Index() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="flex h-screen overflow-hidden bg-background text-foreground">
       <Rail />
-      <main className="min-w-0 flex-1">
+      <main className="min-w-0 flex-1 overflow-y-auto md:ml-[60px]">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTool ?? "hub"}
