@@ -191,9 +191,9 @@ function Index() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="flex h-screen overflow-hidden bg-background text-foreground">
       <Rail />
-      <main className="min-w-0 flex-1">
+      <main className="min-w-0 flex-1 overflow-y-auto md:ml-[60px]">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTool ?? "hub"}
