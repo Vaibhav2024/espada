@@ -1,24 +1,207 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  BookOpen,
+  ChevronRight,
+  Folder,
+  FolderOpen,
+  Home,
+  Layers,
+  LifeBuoy,
+  ListChecks,
+  ListOrdered,
+  Mic,
+  MessageSquare,
+  PenTool,
+  Plus,
+  Send,
+  Smartphone,
+  Sparkles,
+  User,
+  FileText,
+  type LucideIcon,
+} from "lucide-react";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
+import { FlashcardsView } from "@/components/study/FlashcardsView";
+import { QuizView } from "@/components/study/QuizView";
+import { StudyGuideView } from "@/components/study/StudyGuideView";
+import { SolveView } from "@/components/study/SolveView";
+import { WriteView } from "@/components/study/WriteView";
+import { RecordingView } from "@/components/study/RecordingView";
+import { NotesView } from "@/components/study/NotesView";
+
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Atlas Study Workspace — AI Study Hub" },
+      {
+        name: "description",
+        content:
+          "A dark-mode AI study workspace with flashcards, quizzes, study guides, homework solving, writing tools, lecture recording and notes.",
+      },
+      { property: "og:title", content: "Atlas Study Workspace — AI Study Hub" },
+      {
+        property: "og:description",
+        content:
+          "Flashcards, quizzes, study guides, homework help, writing and lecture notes in one dark AI workspace.",
+      },
+    ],
+  }),
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+type ToolId =
+  | "study-guide"
+  | "quiz"
+  | "flashcards"
+  | "solve"
+  | "write"
+  | "recording"
+  | "notes";
+
+type Tool = { id: ToolId; label: string; sub: string; icon: LucideIcon };
+
+const SECTIONS: { title: string; tools: Tool[] }[] = [
+  {
+    title: "Studying",
+    tools: [
+      { id: "study-guide", label: "Study guide", sub: "Prepare for a test", icon: BookOpen },
+      { id: "quiz", label: "Quiz", sub: "Test your knowledge", icon: ListChecks },
+      { id: "flashcards", label: "Flashcards", sub: "Bite-sized studying", icon: Layers },
+    ],
+  },
+  {
+    title: "Homework",
+    tools: [
+      { id: "solve", label: "Solve", sub: "Get answers and explanations", icon: ListOrdered },
+      { id: "write", label: "Write", sub: "Draft paragraphs or papers", icon: PenTool },
+    ],
+  },
+  {
+    title: "Notes",
+    tools: [
+      { id: "recording", label: "Recording", sub: "Automatic lecture notes", icon: Mic },
+      { id: "notes", label: "Notes", sub: "Detailed notes for any resource", icon: FileText },
+    ],
+  },
+];
+
+function Rail() {
+  const items = [Home, FolderOpen, Plus];
+  const bottom = [Smartphone, Send, LifeBuoy, User];
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+    <aside className="hidden w-[72px] shrink-0 flex-col items-center justify-between border-r border-border py-4 md:flex">
+      <div className="flex flex-col items-center gap-3">
+        {items.map((Icon, i) => (
+          <button
+            key={i}
+            className="flex size-11 items-center justify-center rounded-xl bg-secondary/70 text-muted-foreground transition-colors hover:bg-card-hover hover:text-foreground"
+          >
+            <Icon size={19} />
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-col items-center gap-4">
+        {bottom.map((Icon, i) => (
+          <button
+            key={i}
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <Icon size={19} />
+          </button>
+        ))}
+        <div className="flex flex-col items-center rounded-xl border border-border bg-card px-3 py-2 text-[11px] font-semibold text-foreground">
+          <Sparkles size={14} />
+          Pro
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function Hub({ onOpen }: { onOpen: (id: ToolId) => void }) {
+  return (
+    <div className="mx-auto w-full max-w-3xl px-5 py-10">
+      <div className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
+        <Folder size={15} />
+        <span>My folder</span>
+        <ChevronRight size={14} />
+        <MessageSquare size={15} />
+        <span className="font-medium text-foreground">Untitled space</span>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card/60 p-5 sm:p-7">
+        <button className="mb-2 flex w-full items-center gap-2.5 rounded-xl bg-secondary px-4 py-3.5 text-sm font-semibold text-foreground transition-colors hover:bg-card-hover">
+          <MessageSquare size={16} />
+          Chat with AI
+        </button>
+
+        {SECTIONS.map((section) => (
+          <section key={section.title} className="mt-8">
+            <h2 className="text-base font-semibold text-foreground">{section.title}</h2>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {section.tools.map((tool) => (
+                <motion.button
+                  key={tool.id}
+                  onClick={() => onOpen(tool.id)}
+                  whileHover={{ y: -3 }}
+                  whileTap={{ scale: 0.985 }}
+                  transition={{ type: "spring", stiffness: 320, damping: 24 }}
+                  className="group flex h-[150px] flex-col justify-between rounded-2xl border border-border bg-card p-5 text-left transition-colors hover:bg-card-hover"
+                >
+                  <tool.icon
+                    size={20}
+                    className="text-muted-foreground transition-colors group-hover:text-foreground"
+                  />
+                  <div>
+                    <p className="text-base font-semibold text-foreground">{tool.label}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{tool.sub}</p>
+                  </div>
+                </motion.button>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-border bg-card px-5 py-4">
+        <p className="text-sm text-muted-foreground">Ask Atlas anything…</p>
+      </div>
+    </div>
+  );
+}
+
+function Index() {
+  const [activeTool, setActiveTool] = useState<ToolId | null>(null);
+  const back = () => setActiveTool(null);
+
+  const views: Record<ToolId, React.ReactNode> = {
+    "study-guide": <StudyGuideView onBack={back} />,
+    quiz: <QuizView onBack={back} />,
+    flashcards: <FlashcardsView onBack={back} />,
+    solve: <SolveView onBack={back} />,
+    write: <WriteView onBack={back} />,
+    recording: <RecordingView onBack={back} />,
+    notes: <NotesView onBack={back} />,
+  };
+
+  return (
+    <div className="flex min-h-screen bg-background text-foreground">
+      <Rail />
+      <main className="min-w-0 flex-1">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTool ?? "hub"}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {activeTool ? views[activeTool] : <Hub onOpen={setActiveTool} />}
+          </motion.div>
+        </AnimatePresence>
+      </main>
     </div>
   );
 }
