@@ -4,10 +4,14 @@ export function FolderSidebar({
   collapsed,
   onToggle,
   onNewSpace,
+  onMembersToggle,
+  isMembersOpen,
 }: {
   collapsed: boolean;
   onToggle: () => void;
   onNewSpace?: () => void;
+  onMembersToggle?: () => void;
+  isMembersOpen?: boolean;
 }) {
   if (collapsed) {
     return (
@@ -19,7 +23,12 @@ export function FolderSidebar({
         >
           <PanelLeft size={19} />
         </button>
-        <button className="mt-5 text-muted-foreground transition-colors hover:text-foreground">
+        <button 
+          onClick={onMembersToggle}
+          className={`mt-5 transition-colors hover:text-foreground ${
+            isMembersOpen ? "text-foreground" : "text-muted-foreground"
+          }`}
+        >
           <User size={18} />
         </button>
         <button className="text-destructive transition-opacity hover:opacity-80">
@@ -40,7 +49,7 @@ export function FolderSidebar({
   }
 
   return (
-    <div className="flex h-full w-[350px] flex-col border-r border-border bg-sidebar">
+    <div className="flex h-full w-[260px] flex-col border-r border-border bg-sidebar">
       <div className="border-b border-border px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5 text-sm font-semibold text-foreground">
@@ -56,19 +65,24 @@ export function FolderSidebar({
           </button>
         </div>
 
-        <button className="mt-4 flex w-full items-center justify-between rounded-lg px-1 py-1.5 text-sm text-foreground transition-colors hover:bg-secondary/60">
+        <button 
+          onClick={onMembersToggle}
+          className={`mt-4 flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-secondary/60 ${
+            isMembersOpen ? "bg-secondary text-foreground font-semibold" : "text-foreground"
+          }`}
+        >
           <span className="flex items-center gap-2.5">
             <User size={15} className="text-muted-foreground" />
             <span className="font-semibold">Members</span>
           </span>
-          <span className="text-muted-foreground">1</span>
+          <span className="text-muted-foreground text-xs bg-secondary/80 px-1.5 py-0.5 rounded">1</span>
         </button>
-        <button className="mt-1 flex w-full items-center justify-between rounded-lg px-1 py-1.5 text-sm text-foreground transition-colors hover:bg-secondary/60">
+        <button className="mt-1 flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-secondary/60">
           <span className="flex items-center gap-2.5">
             <FolderClosed size={15} className="text-destructive" />
             <span className="font-semibold">Knowledge</span>
           </span>
-          <span className="text-muted-foreground">0</span>
+          <span className="text-muted-foreground text-xs bg-secondary/80 px-1.5 py-0.5 rounded">0</span>
         </button>
       </div>
 

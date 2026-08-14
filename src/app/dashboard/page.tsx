@@ -34,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { FolderSidebar } from "@/components/workspace/FolderSidebar";
+import { MembersPanel } from "@/components/workspace/MembersPanel";
 import { CreateFolderDialog } from "@/components/workspace/CreateFolderDialog";
 import { InviteFriendsDialog } from "@/components/workspace/InviteFriendsDialog";
 import { FlashcardsView } from "@/components/study/FlashcardsView";
@@ -264,6 +265,7 @@ export default function Dashboard() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
 
   const back = () => setActiveTool(null);
 
@@ -294,7 +296,15 @@ export default function Dashboard() {
             collapsed={sidebarCollapsed}
             onToggle={() => setSidebarCollapsed((v) => !v)}
             onNewSpace={() => setCreateOpen(true)}
+            onMembersToggle={() => setShowMembers((prev) => !prev)}
+            isMembersOpen={showMembers}
           />
+        </div>
+      ) : null}
+
+      {folderOpen && showMembers ? (
+        <div className="hidden shrink-0 md:block">
+          <MembersPanel onClose={() => setShowMembers(false)} />
         </div>
       ) : null}
 
