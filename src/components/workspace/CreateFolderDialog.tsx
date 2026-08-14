@@ -37,7 +37,7 @@ export function CreateFolderDialog({
             <div className="mt-4 flex gap-3">
               <FolderOpen size={19} className="mt-0.5 shrink-0 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                Folders help you organize the resources that you want Atlas to carefully study.
+                Folders help you organize the resources that you want Espada to carefully study.
               </p>
             </div>
             <div className="mt-4 flex gap-3">

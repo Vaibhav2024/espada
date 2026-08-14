@@ -34,11 +34,11 @@ export function InviteFriendsDialog({
           </DialogTitle>
         </DialogHeader>
         <p className="mt-3 text-sm text-muted-foreground">
-          Unlock 1 day of Atlas Pro each time a friend you invite finishes creating their account
+          Unlock 1 day of Espada Pro each time a friend you invite finishes creating their account
         </p>
 
         <p className="mt-6 text-sm font-semibold text-foreground">Invite with link</p>
-        <CopyRow value={`www.atlas.org/invite?u=${CODE}`} />
+        <CopyRow value={`www.espada.ai/invite?u=${CODE}`} />
 
         <p className="mt-6 text-sm font-semibold text-foreground">Invite code</p>
         <CopyRow value={CODE} />
