@@ -439,6 +439,20 @@ function Footer() {
 }
 
 export default function Home() {
+  const { isSignedIn, isLoaded } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      router.replace("/dashboard");
+    }
+  }, [isLoaded, isSignedIn, router]);
+
+  // Prevent flash of landing content if redirecting
+  if (isLoaded && isSignedIn) {
+    return <div className="min-h-screen bg-[#0a0a0a]" />;
+  }
+
   return (
     <div
       className="min-h-screen bg-[#0a0a0a] antialiased selection:bg-white/20 selection:text-white"
