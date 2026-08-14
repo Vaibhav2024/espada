@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -226,7 +226,7 @@ function Index() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const back = () => setActiveTool(null);
 
-  const views: Record<ToolId, React.ReactNode> = {
+  const views: Record<ToolId, ReactNode> = {
     "study-guide": <StudyGuideView onBack={back} />,
     quiz: <QuizView onBack={back} />,
     flashcards: <FlashcardsView onBack={back} />,
