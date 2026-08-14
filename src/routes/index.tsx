@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BookOpen,
@@ -15,14 +15,25 @@ import {
   MessageSquare,
   PenTool,
   Plus,
+  PlusCircle,
   Send,
   Smartphone,
+  Ticket,
   ArrowUpCircle,
   User,
   FileText,
   type LucideIcon,
 } from "lucide-react";
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { FolderSidebar } from "@/components/workspace/FolderSidebar";
+import { CreateFolderDialog } from "@/components/workspace/CreateFolderDialog";
+import { InviteFriendsDialog } from "@/components/workspace/InviteFriendsDialog";
 import { FlashcardsView } from "@/components/study/FlashcardsView";
 import { QuizView } from "@/components/study/QuizView";
 import { StudyGuideView } from "@/components/study/StudyGuideView";
@@ -30,6 +41,7 @@ import { SolveView } from "@/components/study/SolveView";
 import { WriteView } from "@/components/study/WriteView";
 import { RecordingView } from "@/components/study/RecordingView";
 import { NotesView } from "@/components/study/NotesView";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -205,7 +217,13 @@ function Hub({ onOpen }: { onOpen: (id: ToolId) => void }) {
 }
 
 function Index() {
+  const navigate = useNavigate();
   const [activeTool, setActiveTool] = useState<ToolId | null>(null);
+  const [folderOpen, setFolderOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const back = () => setActiveTool(null);
 
   const views: Record<ToolId, React.ReactNode> = {
@@ -220,8 +238,52 @@ function Index() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      <Rail />
-      <main className="min-w-0 flex-1 overflow-y-auto md:ml-[60px]">
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenuTrigger asChild>
+          <span className="sr-only" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          side="right"
+          sideOffset={-30}
+          alignOffset={110}
+          className="w-[230px] rounded-2xl border-border bg-popover p-2"
+        >
+          <DropdownMenuItem
+            onSelect={() => setCreateOpen(true)}
+            className="gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold"
+          >
+            <PlusCircle size={16} />
+            Create a new folder
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => navigate({ to: "/join" })}
+            className="gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold"
+          >
+            <Ticket size={16} />
+            Join from invite code
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Rail
+        folderOpen={folderOpen}
+        onFolder={() => setFolderOpen((v) => !v)}
+        onPlus={() => setMenuOpen(true)}
+        onInvite={() => setInviteOpen(true)}
+      />
+
+      {folderOpen ? (
+        <div className="hidden shrink-0 md:block">
+          <FolderSidebar
+            collapsed={sidebarCollapsed}
+            onToggle={() => setSidebarCollapsed((v) => !v)}
+            onNewSpace={() => setMenuOpen(true)}
+          />
+        </div>
+      ) : null}
+
+      <main className="min-w-0 flex-1 overflow-y-auto">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTool ?? "hub"}
@@ -234,6 +296,10 @@ function Index() {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      <CreateFolderDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <InviteFriendsDialog open={inviteOpen} onOpenChange={setInviteOpen} />
     </div>
   );
 }
+
