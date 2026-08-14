@@ -83,21 +83,23 @@ const SECTIONS: { title: string; tools: Tool[] }[] = [
 function Rail({
   folderOpen,
   onFolder,
-  onPlus,
   onInvite,
+  onHome,
+  onCreateFolder,
+  onJoinInvite,
 }: {
   folderOpen: boolean;
   onFolder: () => void;
-  onPlus: () => void;
   onInvite: () => void;
+  onHome: () => void;
+  onCreateFolder: () => void;
+  onJoinInvite: () => void;
 }) {
-  const router = useRouter();
-
   return (
     <aside className="z-20 hidden w-[60px] shrink-0 flex-col items-center justify-between overflow-hidden bg-black py-3.5 md:flex">
       <div className="flex w-full flex-col items-center">
         <button
-          onClick={() => router.push("/")}
+          onClick={onHome}
           aria-label="Home"
           className="flex size-10 items-center justify-center rounded-[14px] bg-secondary text-foreground transition-colors hover:bg-card-hover"
         >
@@ -113,18 +115,65 @@ function Rail({
         >
           <FolderOpen size={18} />
         </button>
-        <button
-          onClick={onPlus}
-          aria-label="Add"
-          className="mt-3 flex size-10 items-center justify-center rounded-[14px] text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
-        >
-          <Plus size={19} />
-        </button>
+        
+        {/* Dropdown Menu for Add (+) button aligned to the right of the button */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              aria-label="Add"
+              className="mt-3 flex size-10 items-center justify-center rounded-[14px] text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground cursor-pointer"
+            >
+              <Plus size={19} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            side="right"
+            align="start"
+            sideOffset={12}
+            className="w-[230px] rounded-2xl border-border bg-popover p-2"
+          >
+            <DropdownMenuItem
+              onSelect={onCreateFolder}
+              className="gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold cursor-pointer"
+            >
+              <PlusCircle size={16} />
+              Create a new folder
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={onJoinInvite}
+              className="gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold cursor-pointer"
+            >
+              <Ticket size={16} />
+              Join from invite code
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <div className="flex flex-col items-center gap-5">
-        <button className="text-muted-foreground transition-colors hover:text-foreground">
-          <Smartphone size={18} />
-        </button>
+        {/* Dropdown Menu for Smartphone button with Android/iOS static coming soon options */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="text-muted-foreground transition-colors hover:text-foreground cursor-pointer">
+              <Smartphone size={18} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            side="right"
+            align="start"
+            sideOffset={12}
+            className="w-[220px] rounded-2xl border-border bg-popover p-2"
+          >
+            <DropdownMenuItem className="flex flex-col items-start gap-0.5 rounded-xl px-3 py-2 text-left hover:bg-transparent focus:bg-transparent cursor-default select-none outline-none">
+              <span className="font-semibold text-foreground text-sm">Download for Android</span>
+              <span className="text-[10px] text-muted-foreground">Coming soon</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem className="flex flex-col items-start gap-0.5 rounded-xl px-3 py-2 text-left hover:bg-transparent focus:bg-transparent cursor-default select-none outline-none">
+              <span className="font-semibold text-foreground text-sm">Download for iOS</span>
+              <span className="text-[10px] text-muted-foreground">Coming soon</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         <button
           onClick={onInvite}
           aria-label="Invite friends"
@@ -230,38 +279,12 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-        <DropdownMenuTrigger asChild>
-          <span className="sr-only" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          side="right"
-          sideOffset={-30}
-          alignOffset={110}
-          className="w-[230px] rounded-2xl border-border bg-popover p-2"
-        >
-          <DropdownMenuItem
-            onSelect={() => setCreateOpen(true)}
-            className="gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold"
-          >
-            <PlusCircle size={16} />
-            Create a new folder
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => router.push("/join")}
-            className="gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold"
-          >
-            <Ticket size={16} />
-            Join from invite code
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
       <Rail
         folderOpen={folderOpen}
         onFolder={() => setFolderOpen((v) => !v)}
-        onPlus={() => setMenuOpen(true)}
+        onHome={() => setActiveTool(null)}
+        onCreateFolder={() => setCreateOpen(true)}
+        onJoinInvite={() => router.push("/join")}
         onInvite={() => setInviteOpen(true)}
       />
 
@@ -270,7 +293,7 @@ export default function Dashboard() {
           <FolderSidebar
             collapsed={sidebarCollapsed}
             onToggle={() => setSidebarCollapsed((v) => !v)}
-            onNewSpace={() => setMenuOpen(true)}
+            onNewSpace={() => setCreateOpen(true)}
           />
         </div>
       ) : null}
