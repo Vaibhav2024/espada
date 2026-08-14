@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FolderSidebar } from "@/components/workspace/FolderSidebar";
 import { MembersPanel } from "@/components/workspace/MembersPanel";
+import { KnowledgePanel } from "@/components/workspace/KnowledgePanel";
 import { CreateFolderDialog } from "@/components/workspace/CreateFolderDialog";
 import { InviteFriendsDialog } from "@/components/workspace/InviteFriendsDialog";
 import { FlashcardsView } from "@/components/study/FlashcardsView";
@@ -266,6 +267,7 @@ export default function Dashboard() {
   const [createOpen, setCreateOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
+  const [showKnowledge, setShowKnowledge] = useState(false);
 
   const back = () => setActiveTool(null);
 
@@ -296,8 +298,16 @@ export default function Dashboard() {
             collapsed={sidebarCollapsed}
             onToggle={() => setSidebarCollapsed((v) => !v)}
             onNewSpace={() => setCreateOpen(true)}
-            onMembersToggle={() => setShowMembers((prev) => !prev)}
+            onMembersToggle={() => {
+              setShowMembers((prev) => !prev);
+              setShowKnowledge(false);
+            }}
             isMembersOpen={showMembers}
+            onKnowledgeToggle={() => {
+              setShowKnowledge((prev) => !prev);
+              setShowMembers(false);
+            }}
+            isKnowledgeOpen={showKnowledge}
           />
         </div>
       ) : null}
@@ -305,6 +315,12 @@ export default function Dashboard() {
       {folderOpen && showMembers ? (
         <div className="hidden shrink-0 md:block">
           <MembersPanel onClose={() => setShowMembers(false)} />
+        </div>
+      ) : null}
+
+      {folderOpen && showKnowledge ? (
+        <div className="hidden shrink-0 md:block">
+          <KnowledgePanel onClose={() => setShowKnowledge(false)} />
         </div>
       ) : null}
 

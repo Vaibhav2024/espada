@@ -6,12 +6,16 @@ export function FolderSidebar({
   onNewSpace,
   onMembersToggle,
   isMembersOpen,
+  onKnowledgeToggle,
+  isKnowledgeOpen,
 }: {
   collapsed: boolean;
   onToggle: () => void;
   onNewSpace?: () => void;
   onMembersToggle?: () => void;
   isMembersOpen?: boolean;
+  onKnowledgeToggle?: () => void;
+  isKnowledgeOpen?: boolean;
 }) {
   if (collapsed) {
     return (
@@ -31,7 +35,12 @@ export function FolderSidebar({
         >
           <User size={18} />
         </button>
-        <button className="text-destructive transition-opacity hover:opacity-80">
+        <button 
+          onClick={onKnowledgeToggle}
+          className={`transition-colors hover:text-foreground ${
+            isKnowledgeOpen ? "text-destructive" : "text-muted-foreground"
+          }`}
+        >
           <FolderClosed size={18} />
         </button>
         <div className="my-2 h-px w-7 bg-border" />
@@ -77,7 +86,12 @@ export function FolderSidebar({
           </span>
           <span className="text-muted-foreground text-xs bg-secondary/80 px-1.5 py-0.5 rounded">1</span>
         </button>
-        <button className="mt-1 flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-secondary/60">
+        <button 
+          onClick={onKnowledgeToggle}
+          className={`mt-1 flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-secondary/60 ${
+            isKnowledgeOpen ? "bg-secondary text-foreground font-semibold" : "text-foreground"
+          }`}
+        >
           <span className="flex items-center gap-2.5">
             <FolderClosed size={15} className="text-destructive" />
             <span className="font-semibold">Knowledge</span>
