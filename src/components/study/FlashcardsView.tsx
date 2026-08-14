@@ -22,7 +22,7 @@ export function FlashcardsView({ onBack }: { onBack: () => void }) {
   const [index, setIndex] = useState(2);
   const [flipped, setFlipped] = useState(false);
   const [known, setKnown] = useState(7);
-  const card = CARDS[index];
+  const card = CARDS[index]!;
 
   const advance = (didKnow: boolean) => {
     if (didKnow) setKnown((k) => k + 1);
