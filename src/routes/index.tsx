@@ -17,7 +17,7 @@ import {
   Plus,
   Send,
   Smartphone,
-  Sparkles,
+  ArrowUpCircle,
   User,
   FileText,
   type LucideIcon,
