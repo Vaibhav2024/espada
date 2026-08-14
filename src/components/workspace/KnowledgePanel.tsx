@@ -130,7 +130,7 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
             <form
               ref={linkInputRef}
               onSubmit={handleAddLink}
-              className="absolute right-0 top-8 z-[60] flex items-center gap-2 rounded-2xl border border-[#2d2d30] bg-[#1e1e20] p-1.5 pl-3.5 shadow-2xl w-[260px] animate-[fadeIn_0.12s_ease-out]"
+              className="absolute right-0 top-11 z-[60] flex items-center gap-2 rounded-2xl border border-[#2d2d30] bg-[#1e1e20] p-1.5 pl-3.5 shadow-2xl w-[260px] animate-[fadeIn_0.12s_ease-out]"
             >
               <input
                 type="url"

@@ -1500,10 +1500,6 @@
     max-width: var(--container-5xl);
   }
 
-  .max-w-\[180px\] {
-    max-width: 180px;
-  }
-
   .max-w-\[240px\] {
     max-width: 240px;
   }
@@ -2632,16 +2628,6 @@
 
   .bg-zinc-800 {
     background-color: var(--color-zinc-800);
-  }
-
-  .bg-zinc-800\/80 {
-    background-color: rgba(39, 39, 42, .8);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .bg-zinc-800\/80 {
-      background-color: color-mix(in oklab, var(--color-zinc-800) 80%, transparent);
-    }
   }
 
   .bg-gradient-to-br {
@@ -4198,16 +4184,6 @@
     .hover\:after\:bg-sidebar-border:hover:after {
       content: var(--tw-content);
       background-color: var(--sidebar-border);
-    }
-  }
-
-  .focus\:border-white\/20:focus {
-    border-color: rgba(255, 255, 255, .2);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .focus\:border-white\/20:focus {
-      border-color: color-mix(in oklab, var(--color-white) 20%, transparent);
     }
   }
 
