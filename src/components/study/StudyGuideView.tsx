@@ -18,6 +18,7 @@ import {
   ChevronsLeft,
   Check,
   FileText,
+  Minus,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChatView } from "./ChatView";
@@ -34,6 +35,11 @@ interface DocLine {
   id: string;
   text: string;
   type: "h1" | "h2" | "h3" | "bullet" | "number" | "quote" | "plain" | "table";
+  tableData?: {
+    headers: string[];
+    rows: string[][];
+    style?: "default" | "striped" | "clean" | "glass";
+  };
 }
 
 const DEFAULT_LINES: DocLine[] = [
@@ -97,6 +103,25 @@ const DEFAULT_LINES: DocLine[] = [
     text: "Proficient Technologies: JavaScript, TypeScript, Python, React.js, Next.js, Node.js, Express.js, MongoDB, PostgreSQL, Docker.",
     type: "bullet",
   },
+  {
+    id: "line-13",
+    text: "Technical Skill Outline Table",
+    type: "h2",
+  },
+  {
+    id: "line-14",
+    text: "",
+    type: "table",
+    tableData: {
+      headers: ["Skill Category", "Key Technologies Group"],
+      rows: [
+        ["Frontend Development", "React.js, Next.js, HTML5, CSS3, TS"],
+        ["Backend Development", "Node.js, Express.js, Python, PostgreSQL"],
+        ["AI & Agents Systems", "OpenAI API, RAG, Tool Calling, Claude"]
+      ],
+      style: "default",
+    }
+  }
 ];
 
 export function StudyGuideView({
@@ -584,7 +609,15 @@ export function StudyGuideView({
           if (element) {
             element.innerText = cleanText;
           }
-          return { ...l, type: formatType, text: cleanText };
+          const tableData = formatType === "table" ? {
+            headers: ["Col 1", "Col 2"],
+            rows: [
+              ["Value A", "Value B"],
+              ["Value C", "Value D"]
+            ],
+            style: "default" as const
+          } : undefined;
+          return { ...l, type: formatType, text: cleanText, tableData };
         }
         return l;
       })
@@ -597,6 +630,12 @@ export function StudyGuideView({
       const element = document.getElementById(`editable-${id}`);
       element?.focus();
     }, 50);
+  };
+
+  const handleUpdateTableData = (id: string, tableData: DocLine["tableData"]) => {
+    updateLines((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, tableData } : l))
+    );
   };
 
   const handleClearFormatting = (id: string) => {
@@ -801,6 +840,7 @@ export function StudyGuideView({
                 onClearFormatting={handleClearFormatting}
                 onCopyText={handleCopyText}
                 onPlusClick={handlePlusClickOnLine}
+                onUpdateTableData={handleUpdateTableData}
               />
             );
           })}
@@ -941,6 +981,330 @@ export function StudyGuideView({
   );
 }
 
+interface DocTableBlockProps {
+  line: DocLine;
+  onUpdateTableData?: (id: string, tableData: DocLine["tableData"]) => void;
+  styleMenuOpen: boolean;
+  setStyleMenuOpen: (open: boolean) => void;
+}
+
+function DocTableBlock({
+  line,
+  onUpdateTableData,
+  styleMenuOpen,
+  setStyleMenuOpen,
+}: DocTableBlockProps) {
+  const tableData = line.tableData || {
+    headers: ["Col 1", "Col 2"],
+    rows: [
+      ["Value A", "Value B"],
+      ["Value C", "Value D"]
+    ],
+    style: "default" as const
+  };
+  
+  const style = tableData.style || "default";
+
+  // Column widths and row heights state
+  const [colWidths, setColWidths] = useState<number[]>(() =>
+    Array(tableData.headers.length).fill(180)
+  );
+  const [rowHeights, setRowHeights] = useState<number[]>(() =>
+    Array(tableData.rows.length).fill(42)
+  );
+
+  // Sync dimensions arrays on column/row additions or deletions
+  useEffect(() => {
+    setColWidths((prev) => {
+      const next = [...prev];
+      while (next.length < tableData.headers.length) next.push(180);
+      return next.slice(0, tableData.headers.length);
+    });
+  }, [tableData.headers.length]);
+
+  useEffect(() => {
+    setRowHeights((prev) => {
+      const next = [...prev];
+      while (next.length < tableData.rows.length) next.push(42);
+      return next.slice(0, tableData.rows.length);
+    });
+  }, [tableData.rows.length]);
+
+  // Horizontal dragging (column resize) handler
+  const handleColResizeStart = (e: React.MouseEvent, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startWidth = colWidths[index] || 180;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const newWidth = Math.max(80, startWidth + deltaX);
+      setColWidths((prev) => {
+        const next = [...prev];
+        next[index] = newWidth;
+        return next;
+      });
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
+  // Vertical dragging (row resize) handler
+  const handleRowResizeStart = (e: React.MouseEvent, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startY = e.clientY;
+    const startHeight = rowHeights[index] || 42;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = moveEvent.clientY - startY;
+      const newHeight = Math.max(25, startHeight + deltaY);
+      setRowHeights((prev) => {
+        const next = [...prev];
+        next[index] = newHeight;
+        return next;
+      });
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
+  const handleHeaderBlur = (index: number, val: string) => {
+    if (!onUpdateTableData) return;
+    const nextHeaders = [...tableData.headers];
+    nextHeaders[index] = val;
+    onUpdateTableData(line.id, {
+      ...tableData,
+      headers: nextHeaders
+    });
+  };
+
+  const handleCellBlur = (rowIndex: number, colIndex: number, val: string) => {
+    if (!onUpdateTableData) return;
+    const nextRows = tableData.rows.map((row, rIdx) => 
+      rIdx === rowIndex ? row.map((cell, cIdx) => cIdx === colIndex ? val : cell) : row
+    );
+    onUpdateTableData(line.id, {
+      ...tableData,
+      rows: nextRows
+    });
+  };
+
+  const handleAddRow = () => {
+    if (!onUpdateTableData) return;
+    const newRow = Array(tableData.headers.length).fill("");
+    onUpdateTableData(line.id, {
+      ...tableData,
+      rows: [...tableData.rows, newRow]
+    });
+  };
+
+  const handleRemoveRow = () => {
+    if (!onUpdateTableData || tableData.rows.length <= 1) return;
+    onUpdateTableData(line.id, {
+      ...tableData,
+      rows: tableData.rows.slice(0, -1)
+    });
+  };
+
+  const handleAddCol = () => {
+    if (!onUpdateTableData) return;
+    const nextHeaders = [...tableData.headers, `Col ${tableData.headers.length + 1}`];
+    const nextRows = tableData.rows.map((row) => [...row, ""]);
+    onUpdateTableData(line.id, {
+      ...tableData,
+      headers: nextHeaders,
+      rows: nextRows
+    });
+  };
+
+  const handleRemoveCol = () => {
+    if (!onUpdateTableData || tableData.headers.length <= 1) return;
+    const nextHeaders = tableData.headers.slice(0, -1);
+    const nextRows = tableData.rows.map((row) => row.slice(0, -1));
+    onUpdateTableData(line.id, {
+      ...tableData,
+      headers: nextHeaders,
+      rows: nextRows
+    });
+  };
+
+  const handleChangeStyle = (newStyle: "default" | "striped" | "clean" | "glass") => {
+    if (!onUpdateTableData) return;
+    onUpdateTableData(line.id, {
+      ...tableData,
+      style: newStyle
+    });
+  };
+
+  // Design styling classes
+  let tableClass = "min-w-full border-collapse rounded-xl overflow-hidden ";
+  let thClass = "p-2.5 text-xs font-bold text-foreground text-left outline-none relative ";
+  let tdClass = "p-2.5 text-xs text-muted-foreground outline-none relative ";
+  let trClass = "";
+
+  if (style === "default") {
+    tableClass += "border border-border";
+    thClass += "border border-border bg-secondary/40";
+    tdClass += "border border-border";
+  } else if (style === "striped") {
+    tableClass += "border border-border";
+    thClass += "border border-border bg-secondary/60";
+    tdClass += "border border-border";
+  } else if (style === "clean") {
+    tableClass += "border-0 border-b border-border";
+    thClass += "border-b border-border font-bold text-foreground";
+    trClass = "border-b border-border/40 hover:bg-[#27272a]/10";
+  } else if (style === "glass") {
+    tableClass += "border border-white/5 bg-white/5 backdrop-blur-md";
+    thClass += "border border-white/5 bg-gradient-to-r from-blue-500/10 to-purple-500/10";
+    tdClass += "border border-white/5";
+  }
+
+  const totalTableWidth = colWidths.reduce((a, b) => a + b, 0);
+
+  return (
+    <div className="w-full my-4 relative group/table select-text">
+      {/* TABLE ACTIONS TOOLBAR */}
+      <div className="flex items-center gap-1.5 mb-2 py-1 px-2.5 bg-[#18181b] border border-border/80 rounded-xl max-w-max select-none shadow-lg animate-in fade-in zoom-in-95 duration-100">
+        <button
+          onClick={handleAddRow}
+          className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-[#27272a] px-2 py-1 rounded transition-all cursor-pointer"
+        >
+          <Plus size={10} /> Row
+        </button>
+        <button
+          onClick={handleRemoveRow}
+          disabled={tableData.rows.length <= 1}
+          className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:text-destructive disabled:opacity-40 disabled:hover:text-muted-foreground hover:bg-[#27272a] px-2 py-1 rounded transition-all cursor-pointer"
+        >
+          <Minus size={10} /> Row
+        </button>
+        <div className="h-3.5 w-[1px] bg-border/60 mx-0.5" />
+        <button
+          onClick={handleAddCol}
+          className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-[#27272a] px-2 py-1 rounded transition-all cursor-pointer"
+        >
+          <Plus size={10} /> Column
+        </button>
+        <button
+          onClick={handleRemoveCol}
+          disabled={tableData.headers.length <= 1}
+          className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:text-destructive disabled:opacity-40 disabled:hover:text-muted-foreground hover:bg-[#27272a] px-2 py-1 rounded transition-all cursor-pointer"
+        >
+          <Minus size={10} /> Column
+        </button>
+        <div className="h-3.5 w-[1px] bg-border/60 mx-0.5" />
+        
+        {/* Style switcher dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setStyleMenuOpen(!styleMenuOpen)}
+            className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-[#27272a] px-2 py-1 rounded transition-all cursor-pointer capitalize"
+          >
+            <span>Style: {style}</span>
+            <ChevronRight size={8} className="rotate-90 text-muted-foreground" />
+          </button>
+
+          {styleMenuOpen && (
+            <div className="absolute left-0 top-full mt-1.5 w-[130px] bg-[#1c1c1f] border border-border/80 rounded-xl p-1 shadow-2xl z-50 text-left">
+              {(["default", "striped", "clean", "glass"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => {
+                    handleChangeStyle(s);
+                    setStyleMenuOpen(false);
+                  }}
+                  className="flex w-full items-center justify-between rounded px-2 py-1.5 text-[10px] font-bold text-foreground hover:bg-[#27272a] capitalize transition-all"
+                >
+                  <span>{s}</span>
+                  {style === s && <Check size={10} className="text-[#3b82f6]" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* RENDER RESIZABLE DYNAMIC TABLE */}
+      <div className="w-full overflow-x-auto border border-border/40 rounded-xl bg-transparent">
+        <table className={tableClass} style={{ tableLayout: "fixed", width: totalTableWidth }}>
+          <thead>
+            <tr className="border-b border-border/40">
+              {tableData.headers.map((header, colIndex) => (
+                <th
+                  key={`header-${colIndex}`}
+                  className={thClass}
+                  style={{ width: colWidths[colIndex] || 180 }}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onBlur={(e) => handleHeaderBlur(colIndex, e.currentTarget.innerText)}
+                >
+                  {header}
+                  {/* COLUMN RESIZER DRAG HANDLE */}
+                  <div
+                    onMouseDown={(e) => handleColResizeStart(e, colIndex)}
+                    className="absolute right-0 top-0 w-1.5 h-full cursor-col-resize hover:bg-[#3b82f6]/40 transition-colors z-20"
+                    title="Drag to resize column"
+                  />
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {tableData.rows.map((row, rowIndex) => (
+              <tr
+                key={`row-${rowIndex}`}
+                className={`${trClass} ${
+                  style === "striped" && rowIndex % 2 === 1 ? "bg-[#1c1c1f]/40" : ""
+                }`}
+                style={{ height: rowHeights[rowIndex] || 42 }}
+              >
+                {row.map((cell, colIndex) => (
+                  <td
+                    key={`cell-${rowIndex}-${colIndex}`}
+                    className={tdClass}
+                    style={{
+                      width: colWidths[colIndex] || 180,
+                      height: rowHeights[rowIndex] || 42,
+                    }}
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(e) => handleCellBlur(rowIndex, colIndex, e.currentTarget.innerText)}
+                  >
+                    {cell}
+                    {/* ROW RESIZER DRAG HANDLE */}
+                    {colIndex === 0 && (
+                      <div
+                        onMouseDown={(e) => handleRowResizeStart(e, rowIndex)}
+                        className="absolute left-0 bottom-0 w-full h-1.5 cursor-row-resize hover:bg-[#3b82f6]/40 transition-colors z-20"
+                        title="Drag to resize row"
+                      />
+                    )}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // Inner wrapper component for block editing
 function DocLineWrapper({
   line,
@@ -959,6 +1323,7 @@ function DocLineWrapper({
   onClearFormatting,
   onCopyText,
   onPlusClick,
+  onUpdateTableData,
 }: {
   line: DocLine;
   lineIndex?: number;
@@ -976,8 +1341,10 @@ function DocLineWrapper({
   onClearFormatting: (id: string) => void;
   onCopyText: (text: string) => void;
   onPlusClick?: (lineId: string) => void;
+  onUpdateTableData?: (id: string, tableData: DocLine["tableData"]) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [styleMenuOpen, setStyleMenuOpen] = useState(false);
 
   // Sync state text into DOM once at start to prevent caret jumping
   useEffect(() => {
@@ -1068,26 +1435,12 @@ function DocLineWrapper({
 
     if (line.type === "table") {
       return (
-        <div className="w-full my-4 overflow-x-auto">
-          <table className="min-w-full border-collapse border border-border rounded-xl">
-            <thead>
-              <tr className="bg-secondary/40">
-                <th className="border border-border p-2 text-xs font-bold text-foreground text-left" contentEditable suppressContentEditableWarning>Col 1</th>
-                <th className="border border-border p-2 text-xs font-bold text-foreground text-left" contentEditable suppressContentEditableWarning>Col 2</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="border border-border p-2 text-xs text-muted-foreground" contentEditable suppressContentEditableWarning>Value A</td>
-                <td className="border border-border p-2 text-xs text-muted-foreground" contentEditable suppressContentEditableWarning>Value B</td>
-              </tr>
-              <tr>
-                <td className="border border-border p-2 text-xs text-muted-foreground" contentEditable suppressContentEditableWarning>Value C</td>
-                <td className="border border-border p-2 text-xs text-muted-foreground" contentEditable suppressContentEditableWarning>Value D</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <DocTableBlock
+          line={line}
+          onUpdateTableData={onUpdateTableData}
+          styleMenuOpen={styleMenuOpen}
+          setStyleMenuOpen={setStyleMenuOpen}
+        />
       );
     }
 
