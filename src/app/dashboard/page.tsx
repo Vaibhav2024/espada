@@ -304,6 +304,7 @@ export default function Dashboard() {
   ]);
   const [activeSpaceId, setActiveSpaceId] = useState<string | null>("college-2026");
   const [showToolSelector, setShowToolSelector] = useState(false);
+  const [pendingPrivateSpace, setPendingPrivateSpace] = useState(false);
   const [showQuizWizard, setShowQuizWizard] = useState(false);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
 
@@ -319,18 +320,26 @@ export default function Dashboard() {
   };
 
   const handleNewSpace = () => {
+    setPendingPrivateSpace(false);
+    setShowToolSelector(true);
+    setFolderOpen(true);
+  };
+
+  const handleNewPrivateSpace = () => {
+    setPendingPrivateSpace(true);
     setShowToolSelector(true);
     setFolderOpen(true);
   };
 
   const handleSelectTool = (toolId: any) => {
     const newId = `space-${Date.now()}`;
+    const forcePrivate = pendingPrivateSpace;
     const newSpace: Space = {
       id: newId,
       name: "Untitled space",
       type: toolId,
-      category: toolId === "chat" ? "private" : "shared",
-      visibility: toolId === "chat" ? "me" : "members",
+      category: forcePrivate ? "private" : (toolId === "chat" ? "private" : "shared"),
+      visibility: (forcePrivate || toolId === "chat") ? "me" : "members",
       isConfigured: toolId !== "quiz" && toolId !== "study-guide",
       resources: [],
       focusedResourceIds: [],
@@ -339,6 +348,7 @@ export default function Dashboard() {
     setSpaces((prev) => [...prev, newSpace]);
     setActiveSpaceId(newId);
     setShowToolSelector(false);
+    setPendingPrivateSpace(false);
 
     if (toolId === "quiz") {
       setShowQuizWizard(true);
@@ -539,6 +549,7 @@ export default function Dashboard() {
               collapsed={sidebarCollapsed}
               onToggle={() => setSidebarCollapsed((v) => !v)}
               onNewSpace={handleNewSpace}
+              onNewPrivateSpace={handleNewPrivateSpace}
               onMembersToggle={() => {
                 setShowMembers((prev) => !prev);
                 setShowKnowledge(false);

@@ -46,6 +46,7 @@ export function FolderSidebar({
   collapsed,
   onToggle,
   onNewSpace,
+  onNewPrivateSpace,
   onMembersToggle,
   isMembersOpen,
   onKnowledgeToggle,
@@ -59,6 +60,7 @@ export function FolderSidebar({
   collapsed: boolean;
   onToggle: () => void;
   onNewSpace?: () => void;
+  onNewPrivateSpace?: () => void;
   onMembersToggle?: () => void;
   isMembersOpen?: boolean;
   onKnowledgeToggle?: () => void;
@@ -268,7 +270,19 @@ export function FolderSidebar({
           {privateSpaces.length > 0 ? (
             privateSpaces.map(renderSpaceButton)
           ) : (
-            <p className="text-xs text-muted-foreground italic mt-2">No spaces yet</p>
+            <div className="flex flex-col items-center justify-center gap-3 py-6 mt-1">
+              {/* Dashed box placeholder icon */}
+              <div className="w-12 h-12 rounded-xl border-2 border-dashed border-border/60 flex items-center justify-center">
+                <div className="w-5 h-5 rounded border-2 border-dashed border-border/60" />
+              </div>
+              <p className="text-sm font-semibold text-muted-foreground">No spaces yet</p>
+              <button
+                onClick={onNewPrivateSpace}
+                className="rounded-xl bg-secondary/80 hover:bg-secondary border border-border px-4 py-2 text-xs font-semibold text-foreground transition-colors cursor-pointer"
+              >
+                Create a space
+              </button>
+            </div>
           )}
         </div>
       </div>
