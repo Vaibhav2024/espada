@@ -306,42 +306,25 @@ export default function Dashboard() {
   };
 
   const handleNewSpace = () => {
-    const newId = `space-${Date.now()}`;
-    const newSpace: Space = {
-      id: newId,
-      name: "Untitled space",
-      type: "default",
-      category: "shared",
-      visibility: "members",
-      isConfigured: false,
-      resources: [],
-      focusedResourceIds: [],
-    };
-    setSpaces((prev) => [...prev, newSpace]);
-    setActiveSpaceId(newId);
     setShowToolSelector(true);
     setFolderOpen(true);
   };
 
   const handleSelectTool = (toolId: any) => {
-    setSpaces((prev) =>
-      prev.map((s) => {
-        if (s.id === activeSpaceId) {
-          if (toolId === "chat") {
-            // Chat with AI goes to Private section
-            return { ...s, type: "chat", category: "private", visibility: "me", isConfigured: true };
-          } else if (toolId === "quiz") {
-            return { ...s, type: "quiz" };
-          } else if (toolId === "study-guide") {
-            return { ...s, type: "study-guide" };
-          } else {
-            return { ...s, type: toolId, isConfigured: true };
-          }
-        }
-        return s;
-      })
-    );
+    const newId = `space-${Date.now()}`;
+    const newSpace: Space = {
+      id: newId,
+      name: "Untitled space",
+      type: toolId,
+      category: toolId === "chat" ? "private" : "shared",
+      visibility: toolId === "chat" ? "me" : "members",
+      isConfigured: toolId !== "quiz" && toolId !== "study-guide",
+      resources: [],
+      focusedResourceIds: [],
+    };
 
+    setSpaces((prev) => [...prev, newSpace]);
+    setActiveSpaceId(newId);
     setShowToolSelector(false);
 
     if (toolId === "quiz") {
@@ -516,7 +499,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background text-foreground">
+    <div className="flex h-screen overflow-hidden bg-black text-foreground">
       <Rail
         folderOpen={folderOpen}
         onFolder={() => setFolderOpen((v) => !v)}
@@ -526,81 +509,84 @@ export default function Dashboard() {
         onInvite={() => setInviteOpen(true)}
       />
 
-      {folderOpen ? (
-        <div className="hidden shrink-0 md:block">
-          <FolderSidebar
-            collapsed={sidebarCollapsed}
-            onToggle={() => setSidebarCollapsed((v) => !v)}
-            onNewSpace={handleNewSpace}
-            onMembersToggle={() => {
-              setShowMembers((prev) => !prev);
-              setShowKnowledge(false);
-            }}
-            isMembersOpen={showMembers}
-            onKnowledgeToggle={() => {
-              setShowKnowledge((prev) => !prev);
-              setShowMembers(false);
-            }}
-            isKnowledgeOpen={showKnowledge}
-            spaces={spaces}
-            activeSpaceId={activeSpaceId}
-            onSelectSpace={(id) => {
-              setActiveSpaceId(id);
-              setActiveTool(null);
-              const space = spaces.find((s) => s.id === id);
-              if (space && !space.isConfigured) {
-                if (space.type === "default") {
-                  setShowToolSelector(true);
-                  setShowQuizWizard(false);
-                } else if (space.type === "quiz") {
-                  setShowQuizWizard(true);
+      {/* Floating rounded window container wrapping all content to the right of the Rail */}
+      <div className="flex-1 flex overflow-hidden rounded-[20px] border border-border bg-[#18181b] my-2 mr-2 ml-1 shadow-2xl">
+        {folderOpen ? (
+          <div className="hidden shrink-0 md:block">
+            <FolderSidebar
+              collapsed={sidebarCollapsed}
+              onToggle={() => setSidebarCollapsed((v) => !v)}
+              onNewSpace={handleNewSpace}
+              onMembersToggle={() => {
+                setShowMembers((prev) => !prev);
+                setShowKnowledge(false);
+              }}
+              isMembersOpen={showMembers}
+              onKnowledgeToggle={() => {
+                setShowKnowledge((prev) => !prev);
+                setShowMembers(false);
+              }}
+              isKnowledgeOpen={showKnowledge}
+              spaces={spaces}
+              activeSpaceId={activeSpaceId}
+              onSelectSpace={(id) => {
+                setActiveSpaceId(id);
+                setActiveTool(null);
+                const space = spaces.find((s) => s.id === id);
+                if (space && !space.isConfigured) {
+                  if (space.type === "default") {
+                    setShowToolSelector(true);
+                    setShowQuizWizard(false);
+                  } else if (space.type === "quiz") {
+                    setShowQuizWizard(true);
+                    setShowToolSelector(false);
+                  }
+                } else {
                   setShowToolSelector(false);
+                  setShowQuizWizard(false);
                 }
-              } else {
-                setShowToolSelector(false);
-                setShowQuizWizard(false);
-              }
-            }}
-            onRenameSpace={(id, newName) => {
-              setSpaces((prev) =>
-                prev.map((s) => (s.id === id ? { ...s, name: newName } : s))
-              );
-            }}
-            onDeleteSpace={(id) => {
-              setSpaces((prev) => prev.filter((s) => s.id !== id));
-              if (activeSpaceId === id) {
-                setActiveSpaceId(null);
-              }
-            }}
-          />
-        </div>
-      ) : null}
+              }}
+              onRenameSpace={(id, newName) => {
+                setSpaces((prev) =>
+                  prev.map((s) => (s.id === id ? { ...s, name: newName } : s))
+                );
+              }}
+              onDeleteSpace={(id) => {
+                setSpaces((prev) => prev.filter((s) => s.id !== id));
+                if (activeSpaceId === id) {
+                  setActiveSpaceId(null);
+                }
+              }}
+            />
+          </div>
+        ) : null}
 
-      {folderOpen && showMembers ? (
-        <div className="hidden shrink-0 md:block">
-          <MembersPanel onClose={() => setShowMembers(false)} />
-        </div>
-      ) : null}
+        {folderOpen && showMembers ? (
+          <div className="hidden shrink-0 md:block">
+            <MembersPanel onClose={() => setShowMembers(false)} />
+          </div>
+        ) : null}
 
-      {folderOpen && showKnowledge ? (
-        <div className="hidden shrink-0 md:block">
-          <KnowledgePanel onClose={() => setShowKnowledge(false)} />
-        </div>
-      ) : null}
+        {folderOpen && showKnowledge ? (
+          <div className="hidden shrink-0 md:block">
+            <KnowledgePanel onClose={() => setShowKnowledge(false)} />
+          </div>
+        ) : null}
 
-      <main className="min-w-0 flex-1 overflow-y-auto">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeSpaceId ? `${activeSpaceId}-${activeSpace?.type}-${activeSpace?.isConfigured}` : (activeTool ?? "hub")}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-          >
-            {mainContent}
-          </motion.div>
-        </AnimatePresence>
-      </main>
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeSpaceId ? `${activeSpaceId}-${activeSpace?.type}-${activeSpace?.isConfigured}` : (activeTool ?? "hub")}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {mainContent}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      </div>
 
       <CreateFolderDialog open={createOpen} onOpenChange={setCreateOpen} />
       <InviteFriendsDialog open={inviteOpen} onOpenChange={setInviteOpen} />
@@ -614,7 +600,13 @@ export default function Dashboard() {
 
       <QuizWizardModal
         isOpen={showQuizWizard}
-        onClose={() => setShowQuizWizard(false)}
+        onClose={() => {
+          setShowQuizWizard(false);
+          if (activeSpace && !activeSpace.isConfigured) {
+            setSpaces((prev) => prev.filter((s) => s.id !== activeSpaceId));
+            setActiveSpaceId(null);
+          }
+        }}
         onComplete={handleQuizWizardComplete}
       />
     </div>
