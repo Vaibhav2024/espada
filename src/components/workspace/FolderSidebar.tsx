@@ -203,10 +203,11 @@ export function FolderSidebar({
 
   return (
     <div className="relative flex h-full w-[260px] flex-col border-r border-border bg-sidebar select-none">
-      <div className="border-b border-border px-6 py-4">
-        <div className="flex items-center justify-between">
+      <div className="border-b border-border px-3 py-3">
+        {/* My folder — full-width active pill row */}
+        <div className="flex items-center justify-between rounded-xl bg-secondary/70 px-3 py-2">
           <div className="flex items-center gap-2.5 text-sm font-semibold text-foreground">
-            <Folder size={16} className="text-muted-foreground" />
+            <Folder size={15} className="text-muted-foreground" />
             My folder
           </div>
           <button
@@ -214,13 +215,13 @@ export function FolderSidebar({
             aria-label="Collapse sidebar"
             className="text-muted-foreground transition-colors hover:text-foreground"
           >
-            <PanelLeft size={18} />
+            <PanelLeft size={17} />
           </button>
         </div>
 
         <button
           onClick={onMembersToggle}
-          className={`mt-4 flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-secondary/60 ${
+          className={`mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition-colors hover:bg-secondary/60 ${
             isMembersOpen ? "bg-secondary text-foreground font-semibold" : "text-foreground"
           }`}
         >
@@ -232,7 +233,7 @@ export function FolderSidebar({
         </button>
         <button
           onClick={onKnowledgeToggle}
-          className={`mt-1 flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-secondary/60 ${
+          className={`mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition-colors hover:bg-secondary/60 ${
             isKnowledgeOpen ? "bg-secondary text-foreground font-semibold" : "text-foreground"
           }`}
         >

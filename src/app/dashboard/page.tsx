@@ -115,15 +115,21 @@ function Rail({
           <Home size={18} />
         </button>
         <div className="my-3 h-px w-6 bg-border" />
-        <button
-          onClick={onFolder}
-          aria-label="My folder"
-          className={`flex size-10 items-center justify-center rounded-[14px] transition-colors hover:bg-card-hover hover:text-foreground ${
-            folderOpen ? "bg-secondary text-foreground" : "bg-secondary/70 text-muted-foreground"
-          }`}
-        >
-          <FolderOpen size={18} />
-        </button>
+        <div className="relative flex w-full items-center justify-center mt-3">
+          <button
+            onClick={onFolder}
+            aria-label="My folder"
+            className={`flex size-10 items-center justify-center rounded-[14px] transition-colors hover:bg-card-hover hover:text-foreground ${
+              folderOpen ? "bg-secondary text-foreground" : "bg-secondary/70 text-muted-foreground"
+            }`}
+          >
+            <FolderOpen size={18} />
+          </button>
+          {/* Active indicator — white pill on right edge */}
+          {folderOpen && (
+            <span className="absolute right-0 top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-full bg-white" />
+          )}
+        </div>
         
         {/* Dropdown Menu for Add (+) button aligned to the right of the button */}
         <DropdownMenu>
