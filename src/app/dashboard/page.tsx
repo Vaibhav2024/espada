@@ -38,6 +38,7 @@ import { MembersPanel } from "@/components/workspace/MembersPanel";
 import { KnowledgePanel } from "@/components/workspace/KnowledgePanel";
 import { CreateFolderDialog } from "@/components/workspace/CreateFolderDialog";
 import { InviteFriendsDialog } from "@/components/workspace/InviteFriendsDialog";
+import { SubscriptionModal } from "@/components/workspace/SubscriptionModal";
 import { FlashcardsView } from "@/components/study/FlashcardsView";
 import { QuizView } from "@/components/study/QuizView";
 import { StudyGuideView } from "@/components/study/StudyGuideView";
@@ -93,6 +94,7 @@ function Rail({
   onHome,
   onCreateFolder,
   onJoinInvite,
+  onPro,
 }: {
   folderOpen: boolean;
   onFolder: () => void;
@@ -100,6 +102,7 @@ function Rail({
   onHome: () => void;
   onCreateFolder: () => void;
   onJoinInvite: () => void;
+  onPro: () => void;
 }) {
   return (
     <aside className="z-20 hidden w-[60px] shrink-0 flex-col items-center justify-between overflow-hidden bg-black py-3.5 md:flex">
@@ -192,12 +195,15 @@ function Rail({
         </button>
 
         {/* Pro upgrade button */}
-        <div className="rounded-[14px] bg-gradient-to-br from-[#ff8a3d] via-[#7c5cff] to-[#38bdf8] p-[1.5px]">
-          <div className="flex flex-col items-center gap-0.5 rounded-[13px] bg-card px-2 py-1.5 text-[10px] font-semibold text-foreground">
+        <button
+          onClick={onPro}
+          className="rounded-[14px] bg-gradient-to-br from-[#ff8a3d] via-[#7c5cff] to-[#38bdf8] p-[1.5px] cursor-pointer hover:scale-105 transition-transform border-none outline-none focus:outline-none"
+        >
+          <div className="flex flex-col items-center gap-0.5 rounded-[13px] bg-[#18181b] px-2 py-1.5 text-[10px] font-semibold text-foreground">
             <ArrowUpCircle size={15} />
             Pro
           </div>
-        </div>
+        </button>
 
         {/* Clerk UserButton — profile picture, account settings, sign-out */}
         <UserButton
@@ -299,6 +305,7 @@ export default function Dashboard() {
   const [activeSpaceId, setActiveSpaceId] = useState<string | null>("college-2026");
   const [showToolSelector, setShowToolSelector] = useState(false);
   const [showQuizWizard, setShowQuizWizard] = useState(false);
+  const [subscriptionOpen, setSubscriptionOpen] = useState(false);
 
   const handleBackToHub = () => {
     setActiveTool(null);
@@ -349,9 +356,11 @@ export default function Dashboard() {
     );
   };
 
-  const handleConfigStudyGuide = () => {
+  const handleConfigStudyGuide = (visibility: VisibilityType) => {
     setSpaces((prev) =>
-      prev.map((s) => (s.id === activeSpaceId ? { ...s, isConfigured: true } : s))
+      prev.map((s) =>
+        s.id === activeSpaceId ? { ...s, visibility, isConfigured: true } : s
+      )
     );
   };
 
@@ -507,6 +516,7 @@ export default function Dashboard() {
         onCreateFolder={() => setCreateOpen(true)}
         onJoinInvite={() => router.push("/join")}
         onInvite={() => setInviteOpen(true)}
+        onPro={() => setSubscriptionOpen(true)}
       />
 
       {/* Floating rounded window container wrapping all content to the right of the Rail */}
@@ -608,6 +618,11 @@ export default function Dashboard() {
           }
         }}
         onComplete={handleQuizWizardComplete}
+      />
+
+      <SubscriptionModal
+        isOpen={subscriptionOpen}
+        onClose={() => setSubscriptionOpen(false)}
       />
     </div>
   );
