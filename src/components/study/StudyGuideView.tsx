@@ -4,9 +4,16 @@ import {
   ChevronRight,
   BookOpen,
   Globe,
-  User,
-  Users,
-  MessageSquare,
+  Plus,
+  MoreVertical,
+  Quote,
+  Table,
+  List,
+  ListOrdered,
+  Eraser,
+  Copy,
+  Layers,
+  Trash2,
   ChevronsRight,
   ChevronsLeft,
 } from "lucide-react";
@@ -21,6 +28,75 @@ interface Resource {
   loading: boolean;
 }
 
+interface DocLine {
+  id: string;
+  text: string;
+  type: "h1" | "h2" | "h3" | "bullet" | "number" | "quote" | "plain" | "table";
+}
+
+const DEFAULT_LINES: DocLine[] = [
+  {
+    id: "line-1",
+    text: "Vaibhav Ravindra Patil: Full Stack Developer & AI Specialist Study Guide",
+    type: "h1",
+  },
+  {
+    id: "line-2",
+    text: "This study guide covers the key information from Vaibhav Ravindra Patil's resume, focusing on his professional summary, technical skills, projects, and education.",
+    type: "plain",
+  },
+  {
+    id: "line-3",
+    text: "Professional Summary",
+    type: "h2",
+  },
+  {
+    id: "line-4",
+    text: "Core Identity: Full Stack Developer, specializing in Generative AI & Agentic Systems.",
+    type: "bullet",
+  },
+  {
+    id: "line-5",
+    text: "Experience: Hands-on experience with MERN and Next.js ecosystems.",
+    type: "bullet",
+  },
+  {
+    id: "line-6",
+    text: "Current Focus: Building AI-powered and agentic applications.",
+    type: "bullet",
+  },
+  {
+    id: "line-7",
+    text: "AI Integration Expertise:",
+    type: "bullet",
+  },
+  {
+    id: "line-8",
+    text: "Integrating Large Language Models (LLMs) like OpenAI, Claude, Gemini into production web applications.",
+    type: "bullet",
+  },
+  {
+    id: "line-9",
+    text: "Implementing Retrieval-Augmented Generation (RAG).",
+    type: "bullet",
+  },
+  {
+    id: "line-10",
+    text: "Building tool-calling features.",
+    type: "bullet",
+  },
+  {
+    id: "line-11",
+    text: "Developing real-time AI features.",
+    type: "bullet",
+  },
+  {
+    id: "line-12",
+    text: "Proficient Technologies: JavaScript, TypeScript, Python, React.js, Next.js, Node.js, Express.js, MongoDB, PostgreSQL, Docker.",
+    type: "bullet",
+  },
+];
+
 export function StudyGuideView({
   spaceName = "Study Guide",
   visibility: initialVisibility = "public",
@@ -34,10 +110,17 @@ export function StudyGuideView({
 }) {
   const [visibility, setVisibility] = useState<VisibilityType>(initialVisibility);
   const [visibilityOpen, setVisibilityOpen] = useState(false);
-  
+  const visibilityRef = useRef<HTMLDivElement>(null);
+
+  // Document lines state
+  const [lines, setLines] = useState<DocLine[]>(DEFAULT_LINES);
+  const [activeSlashLineId, setActiveSlashLineId] = useState<string | null>(null);
+  const [activeMenuLineId, setActiveMenuLineId] = useState<string | null>(null);
+  const [lineIndexMap, setLineIndexMap] = useState<Record<string, number>>({});
+
   // Split pane & Collapse state
   const containerRef = useRef<HTMLDivElement>(null);
-  const [chatWidth, setChatWidth] = useState(420); // Default width in pixels
+  const [chatWidth, setChatWidth] = useState(420);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -46,67 +129,6 @@ export function StudyGuideView({
     { id: "res-resume", name: "Vaibhav_Patil_Resume.docx", loading: false },
   ]);
   const [focusedResourceIds, setFocusedResourceIds] = useState<string[]>(["res-resume"]);
-
-  const visibilityRef = useRef<HTMLDivElement>(null);
-
-  // Drag resizer mechanics
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging || !containerRef.current) return;
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const containerWidth = containerRef.current.clientWidth;
-      // Calculate width from right side of split screen
-      const newWidth = containerRect.right - e.clientX;
-
-      // Limit bounds (between 250px and 60% of viewport)
-      if (newWidth > 250 && newWidth < containerWidth * 0.6) {
-        setChatWidth(newWidth);
-      }
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
-
-    if (isDragging) {
-      window.addEventListener("mousemove", handleMouseMove);
-      window.addEventListener("mouseup", handleMouseUp);
-    }
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [isDragging]);
-
-  // Click outside to close visibility menu
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (visibilityRef.current && !visibilityRef.current.contains(event.target as Node)) {
-        setVisibilityOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleToggleVisibility = (vis: VisibilityType) => {
-    setVisibility(vis);
-    setVisibilityOpen(false);
-    if (onUpdateVisibility) {
-      onUpdateVisibility(vis);
-    }
-  };
-
-  const getVisibilityLabel = (vis: VisibilityType) => {
-    if (vis === "public") return "Public";
-    if (vis === "members") return "Folder Members";
-    return "Private";
-  };
 
   const handleAddResource = (res: Resource) => {
     setChatResources((prev) => [...prev, res]);
@@ -129,6 +151,215 @@ export function StudyGuideView({
     );
   };
 
+  // Calculate list numbers
+  useEffect(() => {
+    let numIndex = 1;
+    const nextMap: Record<string, number> = {};
+    lines.forEach((l) => {
+      if (l.type === "number") {
+        nextMap[l.id] = numIndex++;
+      } else {
+        numIndex = 1; // Reset index if type breaks sequence
+      }
+    });
+    setLineIndexMap(nextMap);
+  }, [lines]);
+
+  // Drag resizer mechanics
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging || !containerRef.current) return;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const containerWidth = containerRef.current.clientWidth;
+      const newWidth = containerRect.right - e.clientX;
+
+      if (newWidth > 250 && newWidth < containerWidth * 0.6) {
+        setChatWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging]);
+
+  // Click outside to close visibility menu and line menus
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (visibilityRef.current && !visibilityRef.current.contains(event.target as Node)) {
+        setVisibilityOpen(false);
+      }
+      
+      // Close active line menus on backdrop clicks
+      const target = event.target as HTMLElement;
+      if (!target.closest(".line-wrapper")) {
+        setActiveSlashLineId(null);
+        setActiveMenuLineId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleToggleVisibility = (vis: VisibilityType) => {
+    setVisibility(vis);
+    setVisibilityOpen(false);
+    if (onUpdateVisibility) {
+      onUpdateVisibility(vis);
+    }
+  };
+
+  const getVisibilityLabel = (vis: VisibilityType) => {
+    if (vis === "public") return "Public";
+    if (vis === "members") return "Folder Members";
+    return "Private";
+  };
+
+  // Editor Actions
+  const handleUpdateText = (id: string, text: string) => {
+    setLines((prev) => prev.map((l) => (l.id === id ? { ...l, text } : l)));
+  };
+
+  const handleInsertLine = (afterId: string) => {
+    const newId = `line-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+    const newBlock: DocLine = { id: newId, text: "", type: "plain" };
+    setLines((prev) => {
+      const idx = prev.findIndex((l) => l.id === afterId);
+      const next = [...prev];
+      next.splice(idx + 1, 0, newBlock);
+      return next;
+    });
+    // Set focus to the newly created line
+    setTimeout(() => {
+      const element = document.getElementById(`editable-${newId}`);
+      element?.focus();
+    }, 50);
+  };
+
+  const handleDeleteLine = (id: string, focusPrev = false) => {
+    if (lines.length <= 1) return; // Keep at least 1 line
+    const idx = lines.findIndex((l) => l.id === id);
+    setLines((prev) => prev.filter((l) => l.id !== id));
+    
+    if (focusPrev && idx > 0) {
+      const prevLine = lines[idx - 1];
+      setTimeout(() => {
+        const element = document.getElementById(`editable-${prevLine.id}`);
+        element?.focus();
+        
+        // Move caret to end of text
+        if (element) {
+          const range = document.createRange();
+          const sel = window.getSelection();
+          range.selectNodeContents(element);
+          range.collapse(false);
+          sel?.removeAllRanges();
+          sel?.addRange(range);
+        }
+      }, 50);
+    }
+  };
+
+  const handleDuplicateLine = (id: string) => {
+    const line = lines.find((l) => l.id === id);
+    if (!line) return;
+    const newId = `line-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+    const copyBlock: DocLine = { ...line, id };
+    const newBlock: DocLine = { ...line, id: newId };
+    setLines((prev) => {
+      const idx = prev.findIndex((l) => l.id === id);
+      const next = [...prev];
+      next.splice(idx + 1, 0, newBlock);
+      return next;
+    });
+    setActiveMenuLineId(null);
+  };
+
+  const handlePlusClickOnLine = (lineId: string) => {
+    const newId = `line-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+    const newBlock: DocLine = { id: newId, text: "/", type: "plain" };
+    setLines((prev) => {
+      const idx = prev.findIndex((l) => l.id === lineId);
+      const next = [...prev];
+      next.splice(idx + 1, 0, newBlock);
+      return next;
+    });
+
+    setActiveMenuLineId(null);
+
+    // Focus the new line, update innerText to "/" and open slash command
+    setTimeout(() => {
+      const element = document.getElementById(`editable-${newId}`);
+      if (element) {
+        element.innerText = "/";
+        element.focus();
+        
+        // Move caret to end of text
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(element);
+        range.collapse(false);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }
+      setActiveSlashLineId(newId);
+    }, 50);
+  };
+
+  const handleApplyFormat = (id: string, formatType: DocLine["type"]) => {
+    setLines((prev) =>
+      prev.map((l) => {
+        if (l.id === id) {
+          // Strip '/' suffix if formatting was chosen from slash command
+          let cleanText = l.text;
+          if (cleanText.endsWith("/")) {
+            cleanText = cleanText.slice(0, -1);
+          }
+          const element = document.getElementById(`editable-${id}`);
+          if (element) {
+            element.innerText = cleanText;
+          }
+          return { ...l, type: formatType, text: cleanText };
+        }
+        return l;
+      })
+    );
+
+    setActiveSlashLineId(null);
+
+    // Re-focus the editor node to match state change updates
+    setTimeout(() => {
+      const element = document.getElementById(`editable-${id}`);
+      element?.focus();
+    }, 50);
+  };
+
+  const handleClearFormatting = (id: string) => {
+    setLines((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, type: "plain" } : l))
+    );
+    setActiveMenuLineId(null);
+  };
+
+  const handleCopyText = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setActiveMenuLineId(null);
+  };
+
   const initialChatMessages = [
     {
       id: "welcome-msg",
@@ -143,10 +374,10 @@ export function StudyGuideView({
       ref={containerRef}
       className="flex h-[calc(100vh-20px)] w-full overflow-hidden select-none bg-[#111113]"
     >
-      {/* LEFT PANEL: Document Viewer */}
+      {/* LEFT PANEL: Document block editor */}
       <div className="flex-1 flex flex-col min-w-0 bg-[#0d0d0e] p-6 overflow-y-auto">
         {/* Header toolbar */}
-        <div className="flex items-center justify-between pb-4 border-b border-border/40 mb-6">
+        <div className="flex items-center justify-between pb-4 border-b border-border/40 mb-6 shrink-0">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Folder size={14} />
             <span>My folder</span>
@@ -182,7 +413,6 @@ export function StudyGuideView({
                     </span>
 
                     <div className="space-y-2">
-                      {/* Just me */}
                       <div
                         onClick={() => handleToggleVisibility("me")}
                         className={`flex items-start gap-2.5 rounded-xl border p-2.5 cursor-pointer transition-colors ${
@@ -200,7 +430,6 @@ export function StudyGuideView({
                         </div>
                       </div>
 
-                      {/* Members in folder */}
                       <div
                         onClick={() => handleToggleVisibility("members")}
                         className={`flex items-start gap-2.5 rounded-xl border p-2.5 cursor-pointer transition-colors ${
@@ -218,7 +447,6 @@ export function StudyGuideView({
                         </div>
                       </div>
 
-                      {/* Anyone on web */}
                       <div
                         onClick={() => handleToggleVisibility("public")}
                         className={`flex items-start gap-2.5 rounded-xl border p-2.5 cursor-pointer transition-colors ${
@@ -241,51 +469,50 @@ export function StudyGuideView({
               </AnimatePresence>
             </div>
 
+            {chatCollapsed && (
+              <button
+                onClick={() => setChatCollapsed(false)}
+                className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-all cursor-pointer border border-border bg-[#18181b] px-3 py-1.5 rounded-xl ml-2"
+              >
+                <ChevronsLeft size={13} />
+                Chat
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Structured Resume content matching Image 1 (completely editable) */}
-        <div
-          contentEditable
-          suppressContentEditableWarning
-          className="space-y-6 max-w-2xl text-left select-text outline-none focus:ring-0"
-        >
-          <h1 className="text-3xl font-extrabold text-foreground leading-tight tracking-tight">
-            Vaibhav Ravindra Patil: Full Stack Developer & AI Specialist Study Guide
-          </h1>
-          
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            This study guide covers the key information from Vaibhav Ravindra Patil's resume, focusing on his professional summary, technical skills, projects, and education.
-          </p>
-
-          <div className="pt-2">
-            <h2 className="text-lg font-bold text-foreground border-b border-border/40 pb-1.5 mb-3.5">
-              Professional Summary
-            </h2>
-            <ul className="list-disc pl-5 mt-2 space-y-4 text-sm text-muted-foreground leading-relaxed">
-              <li>
-                <strong className="text-foreground">Core Identity:</strong> Full Stack Developer, specializing in Generative AI & Agentic Systems.
-              </li>
-              <li>
-                <strong className="text-foreground">Experience:</strong> Hands-on experience with MERN and Next.js ecosystems.
-              </li>
-              <li>
-                <strong className="text-foreground">Current Focus:</strong> Building AI-powered and agentic applications.
-              </li>
-              <li>
-                <strong className="text-foreground">AI Integration Expertise:</strong>
-                <ul className="list-circle pl-6 mt-2 space-y-1.5 text-xs text-muted-foreground/90">
-                  <li>Integrating Large Language Models (LLMs) like OpenAI, Claude, Gemini into production web applications.</li>
-                  <li>Implementing Retrieval-Augmented Generation (RAG).</li>
-                  <li>Building tool-calling features.</li>
-                  <li>Developing real-time AI features.</li>
-                </ul>
-              </li>
-              <li>
-                <strong className="text-foreground">Proficient Technologies:</strong> JavaScript, TypeScript, Python, React.js, Next.js, Node.js, Express.js, MongoDB, PostgreSQL, Docker.
-              </li>
-            </ul>
-          </div>
+        {/* Dynamic block document editor */}
+        <div className="flex-1 space-y-2 select-text max-w-2xl w-full ml-12">
+          {lines.map((line) => {
+            const lineIndex = lineIndexMap[line.id];
+            return (
+              <DocLineWrapper
+                key={line.id}
+                line={line}
+                lineIndex={lineIndex}
+                isSlashOpen={activeSlashLineId === line.id}
+                isMenuOpen={activeMenuLineId === line.id}
+                onOpenSlash={() => {
+                  setActiveSlashLineId(line.id);
+                  setActiveMenuLineId(null);
+                }}
+                onCloseSlash={() => setActiveSlashLineId(null)}
+                onOpenMenu={() => {
+                  setActiveMenuLineId(line.id);
+                  setActiveSlashLineId(null);
+                }}
+                onCloseMenu={() => setActiveMenuLineId(null)}
+                onChangeText={handleUpdateText}
+                onInsertLine={handleInsertLine}
+                onDeleteLine={handleDeleteLine}
+                onDuplicateLine={handleDuplicateLine}
+                onApplyFormat={handleApplyFormat}
+                onClearFormatting={handleClearFormatting}
+                onCopyText={handleCopyText}
+                onPlusClick={handlePlusClickOnLine}
+              />
+            );
+          })}
         </div>
       </div>
 
@@ -305,7 +532,6 @@ export function StudyGuideView({
           style={{ width: chatWidth }}
           className="h-full bg-[#151517] border-l border-border/40 flex flex-col overflow-hidden animate-in slide-in-from-right duration-250 shrink-0"
         >
-          {/* Header toolbar with collapse button */}
           <div className="flex items-center px-4 py-3 border-b border-border/40 shrink-0">
             <button
               onClick={() => setChatCollapsed(true)}
@@ -319,7 +545,6 @@ export function StudyGuideView({
             </span>
           </div>
 
-          {/* Reused ChatView in hideHeader mode */}
           <div className="flex-1 min-h-0">
             <ChatView
               spaceName={spaceName}
@@ -336,7 +561,6 @@ export function StudyGuideView({
         </div>
       )}
 
-      {/* Collapsed Chat Panel Strip matching reference image */}
       {chatCollapsed && (
         <div className="w-[60px] h-full bg-[#151517] border-l border-border/40 flex flex-col items-center py-4 gap-2 shrink-0 animate-in slide-in-from-right duration-200">
           <button
@@ -351,6 +575,316 @@ export function StudyGuideView({
           </span>
         </div>
       )}
+    </div>
+  );
+}
+
+// Inner wrapper component for block editing
+function DocLineWrapper({
+  line,
+  lineIndex,
+  isSlashOpen,
+  isMenuOpen,
+  onOpenSlash,
+  onCloseSlash,
+  onOpenMenu,
+  onCloseMenu,
+  onChangeText,
+  onInsertLine,
+  onDeleteLine,
+  onDuplicateLine,
+  onApplyFormat,
+  onClearFormatting,
+  onCopyText,
+  onPlusClick,
+}: {
+  line: DocLine;
+  lineIndex?: number;
+  isSlashOpen: boolean;
+  isMenuOpen: boolean;
+  onOpenSlash: () => void;
+  onCloseSlash: () => void;
+  onOpenMenu: () => void;
+  onCloseMenu: () => void;
+  onChangeText: (id: string, text: string) => void;
+  onInsertLine: (afterId: string) => void;
+  onDeleteLine: (id: string, focusPrev?: boolean) => void;
+  onDuplicateLine: (id: string) => void;
+  onApplyFormat: (id: string, type: DocLine["type"]) => void;
+  onClearFormatting: (id: string) => void;
+  onCopyText: (text: string) => void;
+  onPlusClick?: (lineId: string) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Sync state text into DOM once at start to prevent caret jumping
+  useEffect(() => {
+    if (ref.current && ref.current.innerText !== line.text) {
+      ref.current.innerText = line.text;
+    }
+  }, []);
+
+  const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+    const text = e.currentTarget.innerText;
+    onChangeText(line.id, text);
+    if (text.endsWith("/")) {
+      onOpenSlash();
+    } else {
+      onCloseSlash();
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      onInsertLine(line.id);
+    } else if (e.key === "Backspace") {
+      const text = ref.current?.innerText || "";
+      if (text.replace(/\n/g, "").trim() === "") {
+        e.preventDefault();
+        onDeleteLine(line.id, true);
+      }
+    }
+  };
+
+  const getStyleForType = (type: DocLine["type"]) => {
+    switch (type) {
+      case "h1":
+        return "text-3xl font-extrabold text-foreground leading-tight tracking-tight outline-none py-1 w-full";
+      case "h2":
+        return "text-xl font-bold text-foreground outline-none py-1 w-full";
+      case "h3":
+        return "text-sm font-semibold text-foreground outline-none py-0.5 w-full";
+      case "quote":
+        return "italic text-muted-foreground outline-none w-full";
+      default:
+        return "text-sm text-muted-foreground leading-relaxed outline-none py-0.5 w-full";
+    }
+  };
+
+  const renderBlockElement = () => {
+    const editableNode = (
+      <div
+        id={`editable-${line.id}`}
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={handleInput}
+        onKeyDown={handleKeyDown}
+        className={getStyleForType(line.type)}
+        data-placeholder={line.text === "" ? "Press '/' for commands..." : ""}
+      />
+    );
+
+    if (line.type === "bullet") {
+      return (
+        <div className="flex items-start gap-3 w-full">
+          <span className="mt-2.5 size-1.5 shrink-0 rounded-full bg-muted-foreground" />
+          {editableNode}
+        </div>
+      );
+    }
+
+    if (line.type === "number") {
+      return (
+        <div className="flex items-start gap-2.5 w-full">
+          <span className="text-xs font-bold text-muted-foreground mt-1 shrink-0">
+            {lineIndex ?? 1}.
+          </span>
+          {editableNode}
+        </div>
+      );
+    }
+
+    if (line.type === "quote") {
+      return (
+        <div className="w-full border-l-4 border-[#3b82f6]/50 bg-secondary/10 px-4 py-2 italic text-muted-foreground rounded-r-xl outline-none">
+          {editableNode}
+        </div>
+      );
+    }
+
+    if (line.type === "table") {
+      return (
+        <div className="w-full my-4 overflow-x-auto">
+          <table className="min-w-full border-collapse border border-border rounded-xl">
+            <thead>
+              <tr className="bg-secondary/40">
+                <th className="border border-border p-2 text-xs font-bold text-foreground text-left" contentEditable suppressContentEditableWarning>Col 1</th>
+                <th className="border border-border p-2 text-xs font-bold text-foreground text-left" contentEditable suppressContentEditableWarning>Col 2</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="border border-border p-2 text-xs text-muted-foreground" contentEditable suppressContentEditableWarning>Value A</td>
+                <td className="border border-border p-2 text-xs text-muted-foreground" contentEditable suppressContentEditableWarning>Value B</td>
+              </tr>
+              <tr>
+                <td className="border border-border p-2 text-xs text-muted-foreground" contentEditable suppressContentEditableWarning>Value C</td>
+                <td className="border border-border p-2 text-xs text-muted-foreground" contentEditable suppressContentEditableWarning>Value D</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    return editableNode;
+  };
+
+  const handlePlusClick = () => {
+    if (onPlusClick) {
+      onPlusClick(line.id);
+    }
+  };
+
+  return (
+    <div className="relative group flex items-start w-full line-wrapper min-h-[32px]">
+      
+      {/* HOVER HELPER BUTTONS (Image 1 style) */}
+      <div className="absolute -left-[54px] top-1.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10">
+        <button
+          onClick={handlePlusClick}
+          className="p-1 hover:bg-[#27272a] rounded text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+          title="Add block commands"
+        >
+          <Plus size={14} />
+        </button>
+        <button
+          onClick={onOpenMenu}
+          className="p-1 hover:bg-[#27272a] rounded text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+          title="Line settings"
+        >
+          <MoreVertical size={14} />
+        </button>
+      </div>
+
+      {/* RENDER THE BLOCK */}
+      <div className="w-full pl-2">
+        {renderBlockElement()}
+      </div>
+
+      {/* SLASH COMMAND BLOCK MENU (Image 2 style) */}
+      <AnimatePresence>
+        {isSlashOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            className="absolute top-full left-2 mt-1 w-[210px] rounded-xl border border-border bg-[#1c1c1f] p-1.5 shadow-2xl z-[999] text-left animate-in fade-in"
+          >
+            <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block px-2.5 py-1.5">
+              Basic blocks
+            </span>
+
+            <div className="space-y-0.5">
+              <button
+                onClick={() => onApplyFormat(line.id, "h1")}
+                className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground hover:bg-[#27272a] transition-colors"
+              >
+                <span className="font-bold text-[10px] text-muted-foreground bg-[#27272a] px-1 py-0.5 rounded shrink-0">H1</span>
+                <span>Heading 1</span>
+              </button>
+
+              <button
+                onClick={() => onApplyFormat(line.id, "h2")}
+                className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground hover:bg-[#27272a] transition-colors"
+              >
+                <span className="font-bold text-[9px] text-muted-foreground bg-[#27272a] px-1 py-0.5 rounded shrink-0">H2</span>
+                <span>Heading 2</span>
+              </button>
+
+              <button
+                onClick={() => onApplyFormat(line.id, "h3")}
+                className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground hover:bg-[#27272a] transition-colors"
+              >
+                <span className="font-bold text-[8px] text-muted-foreground bg-[#27272a] px-1 py-0.5 rounded shrink-0">H3</span>
+                <span>Heading 3</span>
+              </button>
+
+              <button
+                onClick={() => onApplyFormat(line.id, "bullet")}
+                className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground hover:bg-[#27272a] transition-colors"
+              >
+                <List size={13} className="text-muted-foreground shrink-0" />
+                <span>Bullet List</span>
+              </button>
+
+              <button
+                onClick={() => onApplyFormat(line.id, "number")}
+                className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground hover:bg-[#27272a] transition-colors"
+              >
+                <ListOrdered size={13} className="text-muted-foreground shrink-0" />
+                <span>Numbered List</span>
+              </button>
+
+              <button
+                onClick={() => onApplyFormat(line.id, "quote")}
+                className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground hover:bg-[#27272a] transition-colors"
+              >
+                <Quote size={13} className="text-muted-foreground shrink-0" />
+                <span>Quote</span>
+              </button>
+
+              <button
+                onClick={() => onApplyFormat(line.id, "table")}
+                className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground hover:bg-[#27272a] transition-colors"
+              >
+                <Table size={13} className="text-muted-foreground shrink-0" />
+                <span>Table</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ⋮ BUTTON SETTINGS MENU (Image 3 style) */}
+      <AnimatePresence>
+        {isMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            className="absolute top-full left-[-48px] mt-1 w-[160px] rounded-xl border border-border bg-[#1c1c1f] p-1.5 shadow-2xl z-[999] text-left animate-in fade-in"
+          >
+            <div className="space-y-0.5">
+              <button
+                onClick={() => onClearFormatting(line.id)}
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground hover:bg-[#27272a] transition-colors"
+              >
+                <Eraser size={13} className="text-muted-foreground shrink-0" />
+                <span>Clear formatting</span>
+              </button>
+
+              <button
+                onClick={() => onCopyText(line.text)}
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground hover:bg-[#27272a] transition-colors"
+              >
+                <Copy size={13} className="text-muted-foreground shrink-0" />
+                <span>Copy</span>
+              </button>
+
+              <button
+                onClick={() => onDuplicateLine(line.id)}
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground hover:bg-[#27272a] transition-colors"
+              >
+                <Layers size={13} className="text-muted-foreground shrink-0" />
+                <span>Duplicate</span>
+              </button>
+
+              <div className="my-1 border-t border-border/40" />
+
+              <button
+                onClick={() => onDeleteLine(line.id)}
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                <Trash2 size={13} className="shrink-0" />
+                <span>Delete</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

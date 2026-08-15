@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { UserButton } from "@clerk/nextjs";
@@ -307,6 +307,12 @@ export default function Dashboard() {
   const [showQuizWizard, setShowQuizWizard] = useState(false);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
 
+  useEffect(() => {
+    setSpaces((prev) =>
+      prev.filter((s) => s.isConfigured || s.id === activeSpaceId)
+    );
+  }, [activeSpaceId]);
+
   const handleBackToHub = () => {
     setActiveTool(null);
     setActiveSpaceId(null);
@@ -407,10 +413,7 @@ export default function Dashboard() {
         );
       } else {
         // default/chat or other
-        mainContent = <Hub onOpen={(toolId) => {
-          setActiveTool(toolId);
-          setActiveSpaceId(null);
-        }} />;
+        mainContent = <Hub onOpen={handleSelectTool} />;
       }
     } else {
       if (activeSpace.type === "study-guide") {
@@ -502,10 +505,7 @@ export default function Dashboard() {
         );
       } else {
         // Fallback
-        mainContent = <Hub onOpen={(toolId) => {
-          setActiveTool(toolId);
-          setActiveSpaceId(null);
-        }} />;
+        mainContent = <Hub onOpen={handleSelectTool} />;
       }
     }
   } else {
@@ -513,10 +513,7 @@ export default function Dashboard() {
       views[activeTool]
     ) : (
       <Hub
-        onOpen={(toolId) => {
-          setActiveTool(toolId);
-          setActiveSpaceId(null);
-        }}
+        onOpen={handleSelectTool}
       />
     );
   }

@@ -113,4 +113,12 @@
   body::-webkit-scrollbar {
     display: none;
   }
+
+  [contenteditable]:empty::before {
+    content: attr(data-placeholder);
+    color: var(--color-muted-foreground);
+    opacity: 0.5;
+    pointer-events: none;
+    display: inline-block;
+  }
 }

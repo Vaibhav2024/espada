@@ -103,7 +103,7 @@ export function ChatView({
 
   // Add resource helper with simulated 3s loader
   const triggerAddResource = (name: string) => {
-    const newId = `res-${Date.now()}`;
+    const newId = `res-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
     onAddResource({ id: newId, name, loading: true });
     
     // Simulate 3s RAG loader

@@ -224,7 +224,7 @@ export function QuizWizardModal({
 
   // Simulates adding a resource with a 3-second loader
   const addResourceItem = (name: string) => {
-    const newId = `res-${Date.now()}`;
+    const newId = `res-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
     const newRes: Resource = { id: newId, name, loading: true };
     setResources((prev) => [...prev, newRes]);
     
