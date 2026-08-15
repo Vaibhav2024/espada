@@ -33,7 +33,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FolderSidebar } from "@/components/workspace/FolderSidebar";
+import { FolderSidebar, type Space } from "@/components/workspace/FolderSidebar";
 import { MembersPanel } from "@/components/workspace/MembersPanel";
 import { KnowledgePanel } from "@/components/workspace/KnowledgePanel";
 import { CreateFolderDialog } from "@/components/workspace/CreateFolderDialog";
@@ -45,6 +45,10 @@ import { SolveView } from "@/components/study/SolveView";
 import { WriteView } from "@/components/study/WriteView";
 import { RecordingView } from "@/components/study/RecordingView";
 import { NotesView } from "@/components/study/NotesView";
+import { ToolSelectorModal, QuizWizardModal, type VisibilityType } from "@/components/study/SpaceWizard";
+import { StudyGuideEditor } from "@/components/study/StudyGuideEditor";
+import { QuizEditor } from "@/components/study/QuizEditor";
+import { ChatView } from "@/components/study/ChatView";
 
 type ToolId =
   | "study-guide"
@@ -261,7 +265,7 @@ function Hub({ onOpen }: { onOpen: (id: ToolId) => void }) {
 export default function Dashboard() {
   const router = useRouter();
   const [activeTool, setActiveTool] = useState<ToolId | null>(null);
-  const [folderOpen, setFolderOpen] = useState(false);
+  const [folderOpen, setFolderOpen] = useState(true); // Default to true to show the spaces sidebar
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -269,24 +273,254 @@ export default function Dashboard() {
   const [showMembers, setShowMembers] = useState(false);
   const [showKnowledge, setShowKnowledge] = useState(false);
 
-  const back = () => setActiveTool(null);
+  // Dynamic spaces state
+  const [spaces, setSpaces] = useState<Space[]>([
+    {
+      id: "college-2026",
+      name: "College 2026",
+      type: "study-guide",
+      category: "shared",
+      visibility: "members",
+      isConfigured: true,
+      resources: [],
+      focusedResourceIds: [],
+    },
+    {
+      id: "untitled-space",
+      name: "Untitled space",
+      type: "chat",
+      category: "private",
+      visibility: "me",
+      isConfigured: true,
+      resources: [],
+      focusedResourceIds: [],
+    },
+  ]);
+  const [activeSpaceId, setActiveSpaceId] = useState<string | null>("college-2026");
+  const [showToolSelector, setShowToolSelector] = useState(false);
+  const [showQuizWizard, setShowQuizWizard] = useState(false);
+
+  const handleBackToHub = () => {
+    setActiveTool(null);
+    setActiveSpaceId(null);
+  };
+
+  const handleNewSpace = () => {
+    const newId = `space-${Date.now()}`;
+    const newSpace: Space = {
+      id: newId,
+      name: "Untitled space",
+      type: "default",
+      category: "shared",
+      visibility: "members",
+      isConfigured: false,
+      resources: [],
+      focusedResourceIds: [],
+    };
+    setSpaces((prev) => [...prev, newSpace]);
+    setActiveSpaceId(newId);
+    setShowToolSelector(true);
+    setFolderOpen(true);
+  };
+
+  const handleSelectTool = (toolId: any) => {
+    setSpaces((prev) =>
+      prev.map((s) => {
+        if (s.id === activeSpaceId) {
+          if (toolId === "chat") {
+            // Chat with AI goes to Private section
+            return { ...s, type: "chat", category: "private", visibility: "me", isConfigured: true };
+          } else if (toolId === "quiz") {
+            return { ...s, type: "quiz" };
+          } else if (toolId === "study-guide") {
+            return { ...s, type: "study-guide" };
+          } else {
+            return { ...s, type: toolId, isConfigured: true };
+          }
+        }
+        return s;
+      })
+    );
+
+    setShowToolSelector(false);
+
+    if (toolId === "quiz") {
+      setShowQuizWizard(true);
+    }
+  };
+
+  const handleQuizWizardComplete = (method: "resources" | "own", visibility: VisibilityType) => {
+    setSpaces((prev) =>
+      prev.map((s) =>
+        s.id === activeSpaceId
+          ? { ...s, quizMethod: method, visibility, isConfigured: true }
+          : s
+      )
+    );
+    setShowQuizWizard(false);
+  };
+
+  const handleConfigQuiz = () => {
+    setSpaces((prev) =>
+      prev.map((s) => (s.id === activeSpaceId ? { ...s, isConfigured: true } : s))
+    );
+  };
+
+  const handleConfigStudyGuide = () => {
+    setSpaces((prev) =>
+      prev.map((s) => (s.id === activeSpaceId ? { ...s, isConfigured: true } : s))
+    );
+  };
+
+  const handleSaveStudyGuideText = (text: string) => {
+    setSpaces((prev) =>
+      prev.map((s) => (s.id === activeSpaceId ? { ...s, plainTextContent: text } : s))
+    );
+  };
 
   const views: Record<ToolId, React.ReactNode> = {
-    "study-guide": <StudyGuideView onBack={back} />,
-    quiz: <QuizView onBack={back} />,
-    flashcards: <FlashcardsView onBack={back} />,
-    solve: <SolveView onBack={back} />,
-    write: <WriteView onBack={back} />,
-    recording: <RecordingView onBack={back} />,
-    notes: <NotesView onBack={back} />,
+    "study-guide": <StudyGuideView onBack={handleBackToHub} />,
+    quiz: <QuizView onBack={handleBackToHub} />,
+    flashcards: <FlashcardsView onBack={handleBackToHub} />,
+    solve: <SolveView onBack={handleBackToHub} />,
+    write: <WriteView onBack={handleBackToHub} />,
+    recording: <RecordingView onBack={handleBackToHub} />,
+    notes: <NotesView onBack={handleBackToHub} />,
   };
+
+  const activeSpace = spaces.find((s) => s.id === activeSpaceId);
+
+  let mainContent: React.ReactNode = null;
+
+  if (activeSpaceId && activeSpace) {
+    if (!activeSpace.isConfigured) {
+      if (activeSpace.type === "study-guide") {
+        mainContent = (
+          <StudyGuideEditor
+            spaceName={activeSpace.name}
+            initialText={activeSpace.plainTextContent || ""}
+            onSolve={handleConfigStudyGuide}
+            onSaveText={handleSaveStudyGuideText}
+          />
+        );
+      } else if (activeSpace.type === "quiz") {
+        mainContent = (
+          <QuizEditor
+            spaceName={activeSpace.name}
+            visibility={activeSpace.visibility}
+            onTakeQuiz={handleConfigQuiz}
+            onGenerateQuestions={handleConfigQuiz}
+          />
+        );
+      } else {
+        // default/chat or other
+        mainContent = <Hub onOpen={(toolId) => {
+          setActiveTool(toolId);
+          setActiveSpaceId(null);
+        }} />;
+      }
+    } else {
+      if (activeSpace.type === "study-guide") {
+        mainContent = <StudyGuideView onBack={handleBackToHub} />;
+      } else if (activeSpace.type === "quiz") {
+        mainContent = <QuizView onBack={handleBackToHub} />;
+      } else if (activeSpace.type === "flashcards") {
+        mainContent = <FlashcardsView onBack={handleBackToHub} />;
+      } else if (activeSpace.type === "solve") {
+        mainContent = <SolveView onBack={handleBackToHub} />;
+      } else if (activeSpace.type === "write") {
+        mainContent = <WriteView onBack={handleBackToHub} />;
+      } else if (activeSpace.type === "recording") {
+        mainContent = <RecordingView onBack={handleBackToHub} />;
+      } else if (activeSpace.type === "notes") {
+        mainContent = <NotesView onBack={handleBackToHub} />;
+      } else if (activeSpace.type === "chat") {
+        mainContent = (
+          <ChatView
+            spaceName={activeSpace.name}
+            resources={activeSpace.resources || []}
+            focusedResourceIds={activeSpace.focusedResourceIds || []}
+            onAddResource={(res) => {
+              setSpaces((prev) =>
+                prev.map((s) =>
+                  s.id === activeSpace.id
+                    ? { ...s, resources: [...(s.resources || []), res] }
+                    : s
+                )
+              );
+            }}
+            onRemoveResource={(resId) => {
+              setSpaces((prev) =>
+                prev.map((s) =>
+                  s.id === activeSpace.id
+                    ? {
+                        ...s,
+                        resources: (s.resources || []).filter((r) => r.id !== resId),
+                        focusedResourceIds: (s.focusedResourceIds || []).filter(
+                          (id) => id !== resId
+                        ),
+                      }
+                    : s
+                )
+              );
+            }}
+            onToggleFocusResource={(resId) => {
+              setSpaces((prev) =>
+                prev.map((s) => {
+                  if (s.id === activeSpace.id) {
+                    const focusList = s.focusedResourceIds || [];
+                    const nextFocus = focusList.includes(resId)
+                      ? focusList.filter((id) => id !== resId)
+                      : [...focusList, resId];
+                    return { ...s, focusedResourceIds: nextFocus };
+                  }
+                  return s;
+                })
+              );
+            }}
+            onUpdateResourceLoading={(resId, loading) => {
+              setSpaces((prev) =>
+                prev.map((s) =>
+                  s.id === activeSpace.id
+                    ? {
+                        ...s,
+                        resources: (s.resources || []).map((r) =>
+                          r.id === resId ? { ...r, loading } : r
+                        ),
+                      }
+                    : s
+                )
+              );
+            }}
+          />
+        );
+      } else {
+        // Fallback
+        mainContent = <Hub onOpen={(toolId) => {
+          setActiveTool(toolId);
+          setActiveSpaceId(null);
+        }} />;
+      }
+    }
+  } else {
+    mainContent = activeTool ? (
+      views[activeTool]
+    ) : (
+      <Hub
+        onOpen={(toolId) => {
+          setActiveTool(toolId);
+          setActiveSpaceId(null);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
       <Rail
         folderOpen={folderOpen}
         onFolder={() => setFolderOpen((v) => !v)}
-        onHome={() => setActiveTool(null)}
+        onHome={handleBackToHub}
         onCreateFolder={() => setCreateOpen(true)}
         onJoinInvite={() => router.push("/join")}
         onInvite={() => setInviteOpen(true)}
@@ -297,7 +531,7 @@ export default function Dashboard() {
           <FolderSidebar
             collapsed={sidebarCollapsed}
             onToggle={() => setSidebarCollapsed((v) => !v)}
-            onNewSpace={() => setCreateOpen(true)}
+            onNewSpace={handleNewSpace}
             onMembersToggle={() => {
               setShowMembers((prev) => !prev);
               setShowKnowledge(false);
@@ -308,6 +542,36 @@ export default function Dashboard() {
               setShowMembers(false);
             }}
             isKnowledgeOpen={showKnowledge}
+            spaces={spaces}
+            activeSpaceId={activeSpaceId}
+            onSelectSpace={(id) => {
+              setActiveSpaceId(id);
+              setActiveTool(null);
+              const space = spaces.find((s) => s.id === id);
+              if (space && !space.isConfigured) {
+                if (space.type === "default") {
+                  setShowToolSelector(true);
+                  setShowQuizWizard(false);
+                } else if (space.type === "quiz") {
+                  setShowQuizWizard(true);
+                  setShowToolSelector(false);
+                }
+              } else {
+                setShowToolSelector(false);
+                setShowQuizWizard(false);
+              }
+            }}
+            onRenameSpace={(id, newName) => {
+              setSpaces((prev) =>
+                prev.map((s) => (s.id === id ? { ...s, name: newName } : s))
+              );
+            }}
+            onDeleteSpace={(id) => {
+              setSpaces((prev) => prev.filter((s) => s.id !== id));
+              if (activeSpaceId === id) {
+                setActiveSpaceId(null);
+              }
+            }}
           />
         </div>
       ) : null}
@@ -327,19 +591,32 @@ export default function Dashboard() {
       <main className="min-w-0 flex-1 overflow-y-auto">
         <AnimatePresence mode="wait">
           <motion.div
-            key={activeTool ?? "hub"}
+            key={activeSpaceId ? `${activeSpaceId}-${activeSpace?.type}-${activeSpace?.isConfigured}` : (activeTool ?? "hub")}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
           >
-            {activeTool ? views[activeTool] : <Hub onOpen={setActiveTool} />}
+            {mainContent}
           </motion.div>
         </AnimatePresence>
       </main>
 
       <CreateFolderDialog open={createOpen} onOpenChange={setCreateOpen} />
       <InviteFriendsDialog open={inviteOpen} onOpenChange={setInviteOpen} />
+
+      {/* Space setup wizard modals */}
+      <ToolSelectorModal
+        isOpen={showToolSelector}
+        onClose={() => setShowToolSelector(false)}
+        onSelect={handleSelectTool}
+      />
+
+      <QuizWizardModal
+        isOpen={showQuizWizard}
+        onClose={() => setShowQuizWizard(false)}
+        onComplete={handleQuizWizardComplete}
+      />
     </div>
   );
 }
