@@ -34,7 +34,7 @@ export function StudyGuideEditor({
   initialText = "",
 }: {
   spaceName: string;
-  onSolve: (visibility: VisibilityType) => void;
+  onSolve: (visibility: VisibilityType, resources: Resource[]) => void;
   onSaveText: (text: string) => void;
   initialText?: string;
 }) {
@@ -119,7 +119,7 @@ export function StudyGuideEditor({
   const handleGenerate = () => {
     // Save plain text content or metadata if relevant
     onSaveText(importantTopics);
-    onSolve(visibility);
+    onSolve(visibility, resources);
   };
 
   const isGenerateDisabled =

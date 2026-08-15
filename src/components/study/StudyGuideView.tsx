@@ -16,6 +16,8 @@ import {
   Trash2,
   ChevronsRight,
   ChevronsLeft,
+  Check,
+  FileText,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChatView } from "./ChatView";
@@ -102,18 +104,64 @@ export function StudyGuideView({
   visibility: initialVisibility = "public",
   onBack,
   onUpdateVisibility,
+  resources: initialResources = [],
 }: {
   spaceName?: string;
   visibility?: VisibilityType;
   onBack: () => void;
   onUpdateVisibility?: (vis: VisibilityType) => void;
+  resources?: Resource[];
 }) {
   const [visibility, setVisibility] = useState<VisibilityType>(initialVisibility);
   const [visibilityOpen, setVisibilityOpen] = useState(false);
   const visibilityRef = useRef<HTMLDivElement>(null);
 
   // Document lines state
-  const [lines, setLines] = useState<DocLine[]>(DEFAULT_LINES);
+  const [lines, setLines] = useState<DocLine[]>(() => {
+    if (initialResources && initialResources.length > 0) {
+      if (initialResources[0].id === "res-resume") {
+        return DEFAULT_LINES;
+      }
+      return [
+        {
+          id: `line-${Date.now()}-1`,
+          text: `${initialResources[0].name.replace(/\.[^/.]+$/, "")} Study Guide Outline`,
+          type: "h1",
+        },
+        {
+          id: `line-${Date.now()}-2`,
+          text: `This study guide represents the automatically generated outline for your file: ${initialResources[0].name}.`,
+          type: "plain",
+        },
+        {
+          id: `line-${Date.now()}-3`,
+          text: "Executive Summary",
+          type: "h2",
+        },
+        {
+          id: `line-${Date.now()}-4`,
+          text: "Key Point 1: Essential definition or parameter extracted from this source.",
+          type: "bullet",
+        },
+        {
+          id: `line-${Date.now()}-5`,
+          text: "Key Point 2: Supporting arguments or contextual details.",
+          type: "bullet",
+        },
+        {
+          id: `line-${Date.now()}-6`,
+          text: "Practical Implications & Next Steps",
+          type: "h2",
+        },
+        {
+          id: `line-${Date.now()}-7`,
+          text: "Apply the findings to refine application architecture.",
+          type: "bullet",
+        },
+      ];
+    }
+    return DEFAULT_LINES;
+  });
   const [activeSlashLineId, setActiveSlashLineId] = useState<string | null>(null);
   const [activeMenuLineId, setActiveMenuLineId] = useState<string | null>(null);
   const [lineIndexMap, setLineIndexMap] = useState<Record<string, number>>({});
@@ -125,10 +173,20 @@ export function StudyGuideView({
   const [isDragging, setIsDragging] = useState(false);
 
   // Chat resources state
-  const [chatResources, setChatResources] = useState<Resource[]>([
-    { id: "res-resume", name: "Vaibhav_Patil_Resume.docx", loading: false },
-  ]);
-  const [focusedResourceIds, setFocusedResourceIds] = useState<string[]>(["res-resume"]);
+  const [chatResources, setChatResources] = useState<Resource[]>(() => {
+    if (initialResources && initialResources.length > 0) {
+      return initialResources;
+    }
+    return [
+      { id: "res-resume", name: "Vaibhav_Patil_Resume.docx", loading: false },
+    ];
+  });
+  const [focusedResourceIds, setFocusedResourceIds] = useState<string[]>(() => {
+    if (initialResources && initialResources.length > 0) {
+      return initialResources.map((r) => r.id);
+    }
+    return ["res-resume"];
+  });
 
   // Floating text selection popover states
   const [chatInputText, setChatInputText] = useState("");
@@ -185,6 +243,138 @@ export function StudyGuideView({
     setChatInputText(selectedText);
     window.getSelection()?.removeAllRanges();
     setPopupCoords(null);
+  };
+
+  // File switcher states
+  const [folderDropdownOpen, setFolderDropdownOpen] = useState(false);
+  const [activeResourceId, setActiveResourceId] = useState(() => {
+    if (initialResources && initialResources.length > 0) {
+      return initialResources[0].id;
+    }
+    return "res-resume";
+  });
+  const [fileContentMap, setFileContentMap] = useState<Record<string, DocLine[]>>(() => {
+    if (initialResources && initialResources.length > 0) {
+      const initialMap: Record<string, DocLine[]> = {};
+      if (initialResources[0].id === "res-resume") {
+        initialMap["res-resume"] = DEFAULT_LINES;
+      } else {
+        initialMap[initialResources[0].id] = [
+          {
+            id: `line-${Date.now()}-1`,
+            text: `${initialResources[0].name.replace(/\.[^/.]+$/, "")} Study Guide Outline`,
+            type: "h1",
+          },
+          {
+            id: `line-${Date.now()}-2`,
+            text: `This study guide represents the automatically generated outline for your file: ${initialResources[0].name}.`,
+            type: "plain",
+          },
+          {
+            id: `line-${Date.now()}-3`,
+            text: "Executive Summary",
+            type: "h2",
+          },
+          {
+            id: `line-${Date.now()}-4`,
+            text: "Key Point 1: Essential definition or parameter extracted from this source.",
+            type: "bullet",
+          },
+          {
+            id: `line-${Date.now()}-5`,
+            text: "Key Point 2: Supporting arguments or contextual details.",
+            type: "bullet",
+          },
+          {
+            id: `line-${Date.now()}-6`,
+            text: "Practical Implications & Next Steps",
+            type: "h2",
+          },
+          {
+            id: `line-${Date.now()}-7`,
+            text: "Apply the findings to refine application architecture.",
+            type: "bullet",
+          },
+        ];
+      }
+      return initialMap;
+    }
+    return {
+      "res-resume": DEFAULT_LINES,
+    };
+  });
+
+  const updateLines = (newLines: DocLine[] | ((prev: DocLine[]) => DocLine[])) => {
+    setLines((prev) => {
+      const next = typeof newLines === "function" ? newLines(prev) : newLines;
+      setFileContentMap((map) => ({ ...map, [activeResourceId]: next }));
+      return next;
+    });
+  };
+
+  const generateMockLinesForFile = (fileName: string): DocLine[] => [
+    {
+      id: `line-${Date.now()}-1`,
+      text: `${fileName.replace(/\.[^/.]+$/, "")} Study Guide Outline`,
+      type: "h1",
+    },
+    {
+      id: `line-${Date.now()}-2`,
+      text: `This study guide represents the automatically generated outline for your file: ${fileName}.`,
+      type: "plain",
+    },
+    {
+      id: `line-${Date.now()}-3`,
+      text: "Executive Summary",
+      type: "h2",
+    },
+    {
+      id: `line-${Date.now()}-4`,
+      text: "Key Point 1: Essential definition or parameter extracted from this source.",
+      type: "bullet",
+    },
+    {
+      id: `line-${Date.now()}-5`,
+      text: "Key Point 2: Supporting arguments or contextual details.",
+      type: "bullet",
+    },
+    {
+      id: `line-${Date.now()}-6`,
+      text: "Practical Implications & Next Steps",
+      type: "h2",
+    },
+    {
+      id: `line-${Date.now()}-7`,
+      text: "Apply the findings to refine application architecture.",
+      type: "bullet",
+    },
+  ];
+
+  const handleSelectResource = (resId: string) => {
+    // 1. Save current editor lines to map first
+    setFileContentMap((prev) => ({
+      ...prev,
+      [activeResourceId]: lines,
+    }));
+
+    // 2. Set new active resource
+    setActiveResourceId(resId);
+
+    // 3. Load lines for new active resource
+    const existing = fileContentMap[resId];
+    if (existing) {
+      setLines(existing);
+    } else {
+      const resource = chatResources.find((r) => r.id === resId);
+      const generated = generateMockLinesForFile(resource ? resource.name : "Document");
+      setLines(generated);
+      setFileContentMap((prev) => ({
+        ...prev,
+        [resId]: generated,
+      }));
+    }
+
+    setFolderDropdownOpen(false);
   };
 
   const handleAddResource = (res: Resource) => {
@@ -267,6 +457,10 @@ export function StudyGuideView({
         setActiveSlashLineId(null);
         setActiveMenuLineId(null);
       }
+
+      if (!target.closest(".folder-breadcrumb-container")) {
+        setFolderDropdownOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -288,13 +482,13 @@ export function StudyGuideView({
 
   // Editor Actions
   const handleUpdateText = (id: string, text: string) => {
-    setLines((prev) => prev.map((l) => (l.id === id ? { ...l, text } : l)));
+    updateLines((prev) => prev.map((l) => (l.id === id ? { ...l, text } : l)));
   };
 
   const handleInsertLine = (afterId: string) => {
     const newId = `line-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
     const newBlock: DocLine = { id: newId, text: "", type: "plain" };
-    setLines((prev) => {
+    updateLines((prev) => {
       const idx = prev.findIndex((l) => l.id === afterId);
       const next = [...prev];
       next.splice(idx + 1, 0, newBlock);
@@ -310,7 +504,7 @@ export function StudyGuideView({
   const handleDeleteLine = (id: string, focusPrev = false) => {
     if (lines.length <= 1) return; // Keep at least 1 line
     const idx = lines.findIndex((l) => l.id === id);
-    setLines((prev) => prev.filter((l) => l.id !== id));
+    updateLines((prev) => prev.filter((l) => l.id !== id));
     
     if (focusPrev && idx > 0) {
       const prevLine = lines[idx - 1];
@@ -337,7 +531,7 @@ export function StudyGuideView({
     const newId = `line-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
     const copyBlock: DocLine = { ...line, id };
     const newBlock: DocLine = { ...line, id: newId };
-    setLines((prev) => {
+    updateLines((prev) => {
       const idx = prev.findIndex((l) => l.id === id);
       const next = [...prev];
       next.splice(idx + 1, 0, newBlock);
@@ -349,7 +543,7 @@ export function StudyGuideView({
   const handlePlusClickOnLine = (lineId: string) => {
     const newId = `line-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
     const newBlock: DocLine = { id: newId, text: "/", type: "plain" };
-    setLines((prev) => {
+    updateLines((prev) => {
       const idx = prev.findIndex((l) => l.id === lineId);
       const next = [...prev];
       next.splice(idx + 1, 0, newBlock);
@@ -378,7 +572,7 @@ export function StudyGuideView({
   };
 
   const handleApplyFormat = (id: string, formatType: DocLine["type"]) => {
-    setLines((prev) =>
+    updateLines((prev) =>
       prev.map((l) => {
         if (l.id === id) {
           // Strip '/' suffix if formatting was chosen from slash command
@@ -406,7 +600,7 @@ export function StudyGuideView({
   };
 
   const handleClearFormatting = (id: string) => {
-    setLines((prev) =>
+    updateLines((prev) =>
       prev.map((l) => (l.id === id ? { ...l, type: "plain" } : l))
     );
     setActiveMenuLineId(null);
@@ -435,14 +629,54 @@ export function StudyGuideView({
       <div className="flex-1 flex flex-col min-w-0 bg-[#0d0d0e] p-6 overflow-y-auto">
         {/* Header toolbar */}
         <div className="flex items-center justify-between pb-4 border-b border-border/40 mb-6 shrink-0">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Folder size={14} />
-            <span>My folder</span>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground folder-breadcrumb-container relative">
+            <button
+              onClick={() => setFolderDropdownOpen(!folderDropdownOpen)}
+              className="flex items-center gap-1.5 hover:text-foreground hover:bg-[#27272a]/40 px-2 py-1 rounded-lg transition-all cursor-pointer text-muted-foreground"
+            >
+              <Folder size={14} />
+              <span>My folder</span>
+            </button>
             <ChevronRight size={12} />
             <BookOpen size={14} />
             <span className="font-semibold text-foreground truncate max-w-[200px]">
               {spaceName}
             </span>
+
+            <AnimatePresence>
+              {folderDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  className="absolute left-0 top-full mt-2 w-[240px] rounded-xl border border-border bg-[#1c1c1f] p-1.5 shadow-2xl z-50 text-left"
+                >
+                  <span className="text-[9px] font-bold text-[#a1a1aa] uppercase tracking-wider block px-2.5 py-1.5">
+                    Select Document to View
+                  </span>
+
+                  <div className="space-y-0.5 max-h-[220px] overflow-y-auto">
+                    {chatResources.map((res) => (
+                      <button
+                        key={res.id}
+                        onClick={() => handleSelectResource(res.id)}
+                        className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold hover:bg-[#27272a] transition-colors ${
+                          activeResourceId === res.id ? "text-foreground bg-[#27272a]/60" : "text-muted-foreground"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <FileText size={13} className="text-muted-foreground shrink-0" />
+                          <span className="truncate">{res.name}</span>
+                        </div>
+                        {activeResourceId === res.id && (
+                          <Check size={12} className="text-[#3b82f6] shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           <div className="flex items-center gap-3">

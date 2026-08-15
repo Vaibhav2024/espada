@@ -362,10 +362,10 @@ export default function Dashboard() {
     );
   };
 
-  const handleConfigStudyGuide = (visibility: VisibilityType) => {
+  const handleConfigStudyGuide = (visibility: VisibilityType, resources: any[]) => {
     setSpaces((prev) =>
       prev.map((s) =>
-        s.id === activeSpaceId ? { ...s, visibility, isConfigured: true } : s
+        s.id === activeSpaceId ? { ...s, visibility, resources, isConfigured: true } : s
       )
     );
     setFolderOpen(false);
@@ -421,6 +421,7 @@ export default function Dashboard() {
           <StudyGuideView
             spaceName={activeSpace.name}
             visibility={activeSpace.visibility || "public"}
+            resources={activeSpace.resources || []}
             onBack={handleBackToHub}
             onUpdateVisibility={(vis) => {
               setSpaces((prev) =>
