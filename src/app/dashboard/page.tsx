@@ -362,6 +362,7 @@ export default function Dashboard() {
         s.id === activeSpaceId ? { ...s, visibility, isConfigured: true } : s
       )
     );
+    setFolderOpen(false);
   };
 
   const handleSaveStudyGuideText = (text: string) => {
@@ -413,7 +414,20 @@ export default function Dashboard() {
       }
     } else {
       if (activeSpace.type === "study-guide") {
-        mainContent = <StudyGuideView onBack={handleBackToHub} />;
+        mainContent = (
+          <StudyGuideView
+            spaceName={activeSpace.name}
+            visibility={activeSpace.visibility || "public"}
+            onBack={handleBackToHub}
+            onUpdateVisibility={(vis) => {
+              setSpaces((prev) =>
+                prev.map((s) =>
+                  s.id === activeSpace.id ? { ...s, visibility: vis } : s
+                )
+              );
+            }}
+          />
+        );
       } else if (activeSpace.type === "quiz") {
         mainContent = <QuizView onBack={handleBackToHub} />;
       } else if (activeSpace.type === "flashcards") {
@@ -563,9 +577,13 @@ export default function Dashboard() {
               }}
               onDeleteSpace={(id) => {
                 setSpaces((prev) => prev.filter((s) => s.id !== id));
-                if (activeSpaceId === id) {
-                  setActiveSpaceId(null);
-                }
+                setActiveSpaceId((curr) => {
+                  if (curr === id) {
+                    setActiveTool(null);
+                    return null;
+                  }
+                  return curr;
+                });
               }}
             />
           </div>

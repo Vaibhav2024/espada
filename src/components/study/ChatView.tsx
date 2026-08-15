@@ -42,6 +42,8 @@ export function ChatView({
   onRemoveResource,
   onToggleFocusResource,
   onUpdateResourceLoading,
+  hideHeader = false,
+  initialMessages,
 }: {
   spaceName: string;
   resources: Resource[];
@@ -50,8 +52,10 @@ export function ChatView({
   onRemoveResource: (id: string) => void;
   onToggleFocusResource: (id: string) => void;
   onUpdateResourceLoading: (id: string, loading: boolean) => void;
+  hideHeader?: boolean;
+  initialMessages?: Message[];
 }) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(initialMessages || []);
   const [inputText, setInputText] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [focusOpen, setFocusOpen] = useState(false);
@@ -182,18 +186,20 @@ export function ChatView({
   );
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-6 py-4 flex flex-col h-[calc(100vh-20px)] overflow-hidden">
+    <div className={`flex flex-col h-full overflow-hidden ${hideHeader ? "w-full p-2" : "mx-auto w-full max-w-4xl px-6 py-4"}`}>
       {/* Breadcrumb Path */}
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Folder size={15} />
-        <span>My folder</span>
-        <ChevronRight size={14} />
-        <MessageSquare size={15} />
-        <span className="font-medium text-foreground">{spaceName}</span>
-      </div>
+      {!hideHeader && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Folder size={15} />
+          <span>My folder</span>
+          <ChevronRight size={14} />
+          <MessageSquare size={15} />
+          <span className="font-medium text-foreground">{spaceName}</span>
+        </div>
+      )}
 
       {/* Main Chat Screen Area */}
-      <div className="flex-1 mt-6 flex flex-col min-h-0 justify-between overflow-hidden">
+      <div className={`flex-1 flex flex-col min-h-0 justify-between overflow-hidden ${!hideHeader ? "mt-6" : "mt-2"}`}>
         {messages.length === 0 ? (
           /* Welcome messaging block matching Image 1 */
           <div className="max-w-2xl mt-4 space-y-6 overflow-y-auto flex-1 pr-2">
@@ -233,13 +239,11 @@ export function ChatView({
                   msg.sender === "user" ? "ml-auto flex-row-reverse" : ""
                 }`}
               >
-                <div
-                  className={`size-8 rounded-full flex items-center justify-center text-xs font-semibold ${
-                    msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"
-                  }`}
-                >
-                  {msg.sender === "user" ? "U" : "AI"}
-                </div>
+                {msg.sender === "user" && (
+                  <div className="size-8 rounded-full flex items-center justify-center text-xs font-semibold bg-primary text-primary-foreground shrink-0">
+                    U
+                  </div>
+                )}
                 <div
                   className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                     msg.sender === "user"
