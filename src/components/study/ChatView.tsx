@@ -17,6 +17,7 @@ import {
   FileUp,
   FolderHeart,
   ListChecks,
+  Menu,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { KnowledgeSelectorModal } from "./KnowledgeSelector";
@@ -44,6 +45,8 @@ export function ChatView({
   onUpdateResourceLoading,
   hideHeader = false,
   initialMessages,
+  initialInputText = "",
+  onInputChange,
 }: {
   spaceName: string;
   resources: Resource[];
@@ -54,9 +57,17 @@ export function ChatView({
   onUpdateResourceLoading: (id: string, loading: boolean) => void;
   hideHeader?: boolean;
   initialMessages?: Message[];
+  initialInputText?: string;
+  onInputChange?: (text: string) => void;
 }) {
   const [messages, setMessages] = useState<Message[]>(initialMessages || []);
-  const [inputText, setInputText] = useState("");
+  const [inputText, setInputText] = useState(initialInputText);
+
+  useEffect(() => {
+    if (initialInputText !== undefined) {
+      setInputText(initialInputText);
+    }
+  }, [initialInputText]);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [focusOpen, setFocusOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
@@ -92,6 +103,9 @@ export function ChatView({
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setInputText(value);
+    if (onInputChange) {
+      onInputChange(value);
+    }
 
     // Show mention dropdown if user typed '@'
     if (value.endsWith("@")) {
@@ -353,10 +367,10 @@ export function ChatView({
                 <div className="relative" ref={uploadRef}>
                   <button
                     onClick={() => setUploadOpen(!uploadOpen)}
-                    className="flex items-center gap-1.5 rounded-xl bg-secondary/60 hover:bg-secondary px-3.5 py-2 text-xs font-semibold text-foreground transition-all cursor-pointer border border-border"
+                    className="flex size-8 items-center justify-center rounded-xl bg-[#27272a]/60 hover:bg-[#27272a] text-foreground transition-all cursor-pointer border border-border"
+                    title="Upload"
                   >
-                    <Plus size={13} />
-                    Upload
+                    <Plus size={15} />
                   </button>
 
                   <AnimatePresence>
@@ -413,10 +427,13 @@ export function ChatView({
                 <div className="relative" ref={focusRef}>
                   <button
                     onClick={() => setFocusOpen(!focusOpen)}
-                    className="flex items-center gap-1.5 rounded-xl bg-secondary/60 hover:bg-secondary px-3.5 py-2 text-xs font-semibold text-foreground transition-all cursor-pointer border border-border"
+                    className="flex items-center gap-1.5 rounded-xl hover:bg-secondary/60 px-2 py-1 text-xs font-semibold text-foreground transition-all cursor-pointer border border-border"
+                    title="Focused sources"
                   >
-                    <ListChecks size={13} />
-                    Focused {focusedResourceIds.length}
+                    <Menu size={14} className="text-muted-foreground hover:text-foreground" />
+                    <span className="flex size-5 items-center justify-center rounded bg-[#27272a] text-[10px] font-bold text-foreground">
+                      {focusedResourceIds.length}
+                    </span>
                   </button>
 
                   <AnimatePresence>

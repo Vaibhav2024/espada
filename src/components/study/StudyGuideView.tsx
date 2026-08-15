@@ -130,6 +130,63 @@ export function StudyGuideView({
   ]);
   const [focusedResourceIds, setFocusedResourceIds] = useState<string[]>(["res-resume"]);
 
+  // Floating text selection popover states
+  const [chatInputText, setChatInputText] = useState("");
+  const [selectedText, setSelectedText] = useState("");
+  const [popupCoords, setPopupCoords] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+        setPopupCoords(null);
+        setSelectedText("");
+        return;
+      }
+      
+      const text = selection.toString();
+      const anchorNode = selection.anchorNode;
+      let isInsideEditor = false;
+      let parent = anchorNode?.parentElement;
+      while (parent) {
+        if (parent.classList.contains("line-wrapper")) {
+          isInsideEditor = true;
+          break;
+        }
+        parent = parent.parentElement;
+      }
+
+      if (!isInsideEditor) {
+        setPopupCoords(null);
+        setSelectedText("");
+        return;
+      }
+
+      try {
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        
+        setPopupCoords({
+          x: rect.left + rect.width / 2,
+          y: rect.bottom + 8,
+        });
+        setSelectedText(text);
+      } catch (e) {
+        setPopupCoords(null);
+        setSelectedText("");
+      }
+    };
+
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () => document.removeEventListener("selectionchange", handleSelectionChange);
+  }, []);
+
+  const handleAddToChat = () => {
+    setChatInputText(selectedText);
+    window.getSelection()?.removeAllRanges();
+    setPopupCoords(null);
+  };
+
   const handleAddResource = (res: Resource) => {
     setChatResources((prev) => [...prev, res]);
   };
@@ -556,6 +613,8 @@ export function StudyGuideView({
               onUpdateResourceLoading={handleUpdateLoading}
               hideHeader={true}
               initialMessages={initialChatMessages}
+              initialInputText={chatInputText}
+              onInputChange={(val) => setChatInputText(val)}
             />
           </div>
         </div>
@@ -573,6 +632,75 @@ export function StudyGuideView({
           <span className="text-[10px] font-bold text-muted-foreground select-none mt-1">
             Chat
           </span>
+        </div>
+      )}
+
+      {popupCoords && (
+        <div
+          style={{
+            position: "fixed",
+            left: popupCoords.x,
+            top: popupCoords.y,
+            transform: "translateX(-50%)",
+          }}
+          className="flex items-center gap-1 bg-[#1c1c1f] border border-border/80 rounded-xl px-2.5 py-1.5 shadow-2xl z-[9999] animate-in fade-in zoom-in-95 duration-100"
+        >
+          <button
+            onMouseDown={(e) => {
+              e.preventDefault();
+              handleAddToChat();
+            }}
+            className="flex items-center gap-1.5 text-xs font-semibold text-foreground hover:bg-[#27272a] px-2 py-1 rounded-lg transition-colors cursor-pointer"
+          >
+            <Plus size={13} />
+            <span>Add to chat</span>
+          </button>
+
+          <div className="h-4 w-[1px] bg-border/60 mx-1.5" />
+
+          <button
+            onMouseDown={(e) => {
+              e.preventDefault();
+              document.execCommand("bold");
+            }}
+            className="size-7 flex items-center justify-center font-bold text-xs text-foreground hover:bg-[#27272a] rounded-lg cursor-pointer"
+            title="Bold"
+          >
+            B
+          </button>
+
+          <button
+            onMouseDown={(e) => {
+              e.preventDefault();
+              document.execCommand("italic");
+            }}
+            className="size-7 flex items-center justify-center italic font-semibold text-xs text-foreground hover:bg-[#27272a] rounded-lg cursor-pointer"
+            title="Italic"
+          >
+            I
+          </button>
+
+          <button
+            onMouseDown={(e) => {
+              e.preventDefault();
+              document.execCommand("underline");
+            }}
+            className="size-7 flex items-center justify-center underline text-xs text-foreground hover:bg-[#27272a] rounded-lg cursor-pointer"
+            title="Underline"
+          >
+            U
+          </button>
+
+          <button
+            onMouseDown={(e) => {
+              e.preventDefault();
+              document.execCommand("strikeThrough");
+            }}
+            className="size-7 flex items-center justify-center line-through text-xs text-foreground hover:bg-[#27272a] rounded-lg cursor-pointer"
+            title="Strikethrough"
+          >
+            S
+          </button>
         </div>
       )}
     </div>
