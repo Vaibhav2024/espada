@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FolderSidebar, type Space } from "@/components/workspace/FolderSidebar";
 import { MembersPanel } from "@/components/workspace/MembersPanel";
-import { KnowledgePanel } from "@/components/workspace/KnowledgePanel";
+import { KnowledgePanel, type KnowledgeItem } from "@/components/workspace/KnowledgePanel";
 import { CreateFolderDialog } from "@/components/workspace/CreateFolderDialog";
 import { InviteFriendsDialog } from "@/components/workspace/InviteFriendsDialog";
 import { SubscriptionModal } from "@/components/workspace/SubscriptionModal";
@@ -98,6 +98,11 @@ function Rail({
   folders = [],
   activeFolderId = "default",
   onSelectFolder,
+  onFolderContextMenu,
+  hasDefaultFolder = true,
+  defaultFolderName = "My folder",
+  defaultFolderIconName = "Folder",
+  defaultFolderThemeColor = "#a1a1aa",
 }: {
   folderOpen: boolean;
   onFolder: () => void;
@@ -109,6 +114,11 @@ function Rail({
   folders?: FolderData[];
   activeFolderId?: string;
   onSelectFolder: (id: string) => void;
+  onFolderContextMenu: (e: React.MouseEvent, folderId: string) => void;
+  hasDefaultFolder?: boolean;
+  defaultFolderName?: string;
+  defaultFolderIconName?: string;
+  defaultFolderThemeColor?: string;
 }) {
   const isDefaultActive = activeFolderId === "default";
   const handleDefaultFolderClick = () => {
@@ -118,6 +128,7 @@ function Rail({
       onSelectFolder("default");
     }
   };
+  const DefaultFolderIcon = (Lucide as any)[defaultFolderIconName] || FolderOpen;
   return (
     <aside className="z-20 hidden w-[60px] shrink-0 flex-col items-center justify-between overflow-hidden bg-black py-3.5 md:flex">
       <div className="flex w-full flex-col items-center">
@@ -129,21 +140,24 @@ function Rail({
           <Home size={18} />
         </button>
         <div className="my-3 h-px w-6 bg-border" />
-        <div className="relative flex w-full items-center justify-center mt-3">
-          <button
-            onClick={handleDefaultFolderClick}
-            aria-label="My folder"
-            className={`flex size-10 items-center justify-center rounded-[14px] transition-colors hover:bg-card-hover hover:text-foreground ${
-              isDefaultActive ? "bg-secondary text-foreground" : "bg-secondary/70 text-muted-foreground"
-            }`}
-          >
-            <FolderOpen size={18} />
-          </button>
-          {/* Active indicator — white pill on right edge */}
-          {isDefaultActive && (
-            <span className="absolute right-0 top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-full bg-white" />
-          )}
-        </div>
+        {hasDefaultFolder && (
+          <div className="relative flex w-full items-center justify-center mt-3 animate-in fade-in zoom-in duration-150">
+            <button
+              onClick={handleDefaultFolderClick}
+              onContextMenu={(e) => onFolderContextMenu(e, "default")}
+              aria-label={defaultFolderName}
+              className={`flex size-10 items-center justify-center rounded-[14px] transition-colors hover:bg-card-hover hover:text-foreground ${
+                isDefaultActive ? "bg-secondary text-foreground" : "bg-secondary/70 text-muted-foreground"
+              }`}
+            >
+              <DefaultFolderIcon size={18} style={{ color: defaultFolderThemeColor }} />
+            </button>
+            {/* Active indicator — white pill on right edge */}
+            {isDefaultActive && (
+              <span className="absolute right-0 top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-full bg-white" />
+            )}
+          </div>
+        )}
 
         {folders.map((folder) => {
           const FolderIcon = (Lucide as any)[folder.iconName] || Lucide.Folder;
@@ -152,6 +166,7 @@ function Rail({
             <div key={folder.id} className="relative flex w-full items-center justify-center mt-3 animate-in fade-in zoom-in duration-150">
               <button
                 onClick={() => onSelectFolder(folder.id)}
+                onContextMenu={(e) => onFolderContextMenu(e, folder.id)}
                 aria-label={folder.name}
                 className={`flex size-10 items-center justify-center rounded-[14px] transition-colors hover:bg-card-hover hover:text-foreground ${
                   isActive ? "bg-secondary text-foreground" : "bg-secondary/70 text-muted-foreground"
@@ -354,7 +369,89 @@ export interface FolderData {
 export default function Dashboard() {
   const router = useRouter();
   const [folders, setFolders] = useState<FolderData[]>([]);
-  const [activeFolderId, setActiveFolderId] = useState<string>("default");
+  const [activeFolderId, setActiveFolderId] = useState<string | null>("default");
+  const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItem[]>([]);
+
+  // Default folder states
+  const [hasDefaultFolder, setHasDefaultFolder] = useState(true);
+  const [defaultFolderName, setDefaultFolderName] = useState("My folder");
+  const [defaultFolderIconName, setDefaultFolderIconName] = useState("Folder");
+  const [defaultFolderThemeColor, setDefaultFolderThemeColor] = useState("#a1a1aa");
+
+  const [folderContextMenu, setFolderContextMenu] = useState<{
+    folderId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const [renameFolderId, setRenameFolderId] = useState<string | null>(null);
+  const [renameFolderName, setRenameFolderName] = useState("");
+
+  const [deleteFolderId, setDeleteFolderId] = useState<string | null>(null);
+
+  const handleFolderContextMenu = (e: React.MouseEvent, folderId: string) => {
+    e.preventDefault();
+    setFolderContextMenu({
+      folderId,
+      x: e.clientX,
+      y: e.clientY,
+    });
+  };
+
+  const handleSaveFolderRename = () => {
+    if (renameFolderId && renameFolderName.trim()) {
+      if (renameFolderId === "default") {
+        setDefaultFolderName(renameFolderName.trim());
+      } else {
+        setFolders((prev) =>
+          prev.map((f) => (f.id === renameFolderId ? { ...f, name: renameFolderName.trim() } : f))
+        );
+      }
+    }
+    setRenameFolderId(null);
+  };
+
+  const handleConfirmFolderDelete = () => {
+    if (deleteFolderId) {
+      if (deleteFolderId === "default") {
+        setHasDefaultFolder(false);
+        setSpaces((prev) => prev.filter((s) => s.folderId !== "default" && s.folderId !== undefined));
+        setKnowledgeItems((prev) => prev.filter((k) => k.folderId !== "default" && k.folderId !== undefined));
+        if (activeFolderId === "default") {
+          if (folders.length > 0) {
+            setActiveFolderId(folders[0].id);
+          } else {
+            setActiveFolderId(null);
+          }
+        }
+      } else {
+        setFolders((prev) => prev.filter((f) => f.id !== deleteFolderId));
+        setSpaces((prev) => prev.filter((s) => s.folderId !== deleteFolderId));
+        setKnowledgeItems((prev) => prev.filter((k) => k.folderId !== deleteFolderId));
+        
+        if (activeFolderId === deleteFolderId) {
+          if (hasDefaultFolder) {
+            setActiveFolderId("default");
+          } else if (folders.length > 1) {
+            const remaining = folders.filter((f) => f.id !== deleteFolderId);
+            setActiveFolderId(remaining[0].id);
+          } else {
+            setActiveFolderId(null);
+          }
+        }
+      }
+      setActiveSpaceId(null);
+      setActiveTool(null);
+    }
+    setDeleteFolderId(null);
+  };
+
+  // Close context menu on click outside
+  useEffect(() => {
+    const handleClose = () => setFolderContextMenu(null);
+    window.addEventListener("click", handleClose);
+    return () => window.removeEventListener("click", handleClose);
+  }, []);
 
   const handleCreateFolder = (name: string, themeName: string, themeColor: string, iconName: string, isPublic: boolean) => {
     const newId = `folder-${Date.now()}`;
@@ -480,7 +577,7 @@ export default function Dashboard() {
       isConfigured: toolId !== "quiz" && toolId !== "study-guide" && toolId !== "flashcards" && toolId !== "solve" && toolId !== "write" && toolId !== "notes",
       resources: [],
       focusedResourceIds: [],
-      folderId: activeFolderId,
+      folderId: activeFolderId || undefined,
     };
 
     setSpaces((prev) => [...prev, newSpace]);
@@ -813,6 +910,8 @@ export default function Dashboard() {
     ? undefined
     : folders.find((f) => f.id === activeFolderId);
 
+  const finalMainContent = activeFolderId ? mainContent : <div className="h-full w-full bg-[#18181b]" />;
+
   return (
     <div className="flex h-screen overflow-hidden bg-black text-foreground">
       <Rail
@@ -824,13 +923,18 @@ export default function Dashboard() {
         onInvite={() => setInviteOpen(true)}
         onPro={() => setSubscriptionOpen(true)}
         folders={folders}
-        activeFolderId={activeFolderId}
+        activeFolderId={activeFolderId || ""}
         onSelectFolder={handleSelectFolder}
+        onFolderContextMenu={handleFolderContextMenu}
+        hasDefaultFolder={hasDefaultFolder}
+        defaultFolderName={defaultFolderName}
+        defaultFolderIconName={defaultFolderIconName}
+        defaultFolderThemeColor={defaultFolderThemeColor}
       />
 
       {/* Floating rounded window container wrapping all content to the right of the Rail */}
       <div className="flex-1 flex overflow-hidden rounded-[20px] border border-border bg-[#18181b] my-2 mr-2 ml-1 shadow-2xl">
-        {folderOpen ? (
+        {folderOpen && activeFolderId ? (
           <div className="hidden shrink-0 md:block">
             <FolderSidebar
               collapsed={sidebarCollapsed}
@@ -848,9 +952,10 @@ export default function Dashboard() {
               }}
               isKnowledgeOpen={showKnowledge}
               spaces={filteredSpaces}
-              folderName={activeFolder ? activeFolder.name : "My folder"}
-              folderIconName={activeFolder ? activeFolder.iconName : "Folder"}
-              folderThemeColor={activeFolder ? activeFolder.themeColor : "#a1a1aa"}
+              folderName={activeFolderId === "default" ? defaultFolderName : (activeFolder ? activeFolder.name : "My folder")}
+              folderIconName={activeFolderId === "default" ? defaultFolderIconName : (activeFolder ? activeFolder.iconName : "Folder")}
+              folderThemeColor={activeFolderId === "default" ? defaultFolderThemeColor : (activeFolder ? activeFolder.themeColor : "#a1a1aa")}
+              knowledgeCount={knowledgeItems.filter((k) => (k.folderId || "default") === activeFolderId).length}
               activeSpaceId={activeSpaceId}
               onSelectSpace={(id) => {
                 setActiveSpaceId(id);
@@ -896,7 +1001,19 @@ export default function Dashboard() {
 
         {folderOpen && showKnowledge ? (
           <div className="hidden shrink-0 md:block">
-            <KnowledgePanel onClose={() => setShowKnowledge(false)} />
+            <KnowledgePanel
+              onClose={() => setShowKnowledge(false)}
+              items={knowledgeItems.filter((k) => (k.folderId || "default") === activeFolderId)}
+              onAddItem={(name, type) => {
+                const newItem: KnowledgeItem = {
+                  id: `k-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
+                  name,
+                  type,
+                  folderId: activeFolderId || "",
+                };
+                setKnowledgeItems((prev) => [...prev, newItem]);
+              }}
+            />
           </div>
         ) : null}
 
@@ -910,7 +1027,7 @@ export default function Dashboard() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
             >
-              {mainContent}
+              {finalMainContent}
             </motion.div>
           </AnimatePresence>
         </main>
@@ -943,6 +1060,124 @@ export default function Dashboard() {
         isOpen={subscriptionOpen}
         onClose={() => setSubscriptionOpen(false)}
       />
+
+      {/* Floating Folder Context Menu (Rename / Delete) */}
+      <AnimatePresence>
+        {folderContextMenu && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.1 }}
+            style={{ top: folderContextMenu.y, left: folderContextMenu.x }}
+            className="fixed z-50 w-[150px] rounded-xl border border-border bg-[#1c1c1f] p-1.5 shadow-2xl"
+          >
+            <button
+              onClick={() => {
+                if (folderContextMenu.folderId === "default") {
+                  setRenameFolderId("default");
+                  setRenameFolderName(defaultFolderName);
+                } else {
+                  const f = folders.find((folder) => folder.id === folderContextMenu.folderId);
+                  if (f) {
+                    setRenameFolderId(f.id);
+                    setRenameFolderName(f.name);
+                  }
+                }
+                setFolderContextMenu(null);
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground hover:bg-[#27272a] transition-colors border-none bg-transparent text-left cursor-pointer"
+            >
+              <Lucide.PenTool size={13} className="text-muted-foreground" />
+              Rename
+            </button>
+            <button
+              onClick={() => {
+                setDeleteFolderId(folderContextMenu.folderId);
+                setFolderContextMenu(null);
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors border-none bg-transparent text-left cursor-pointer"
+            >
+              <Lucide.Trash2 size={13} />
+              Delete folder
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Folder Rename Modal */}
+      <AnimatePresence>
+        {renameFolderId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setRenameFolderId(null)} />
+            
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative z-10 w-full max-w-[360px] rounded-2xl border border-border bg-[#18181b] p-5 shadow-2xl"
+            >
+              <h3 className="text-base font-semibold text-foreground">Rename Folder</h3>
+              <input
+                value={renameFolderName}
+                onChange={(e) => setRenameFolderName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSaveFolderRename()}
+                className="mt-3.5 w-full rounded-xl bg-secondary/60 border border-border px-3.5 py-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-ring"
+                autoFocus
+              />
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() => setRenameFolderId(null)}
+                  className="flex-1 rounded-xl bg-secondary/60 hover:bg-secondary px-4 py-2 text-xs font-semibold text-foreground border border-border transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveFolderRename}
+                  className="flex-1 rounded-xl bg-primary hover:opacity-90 px-4 py-2 text-xs font-semibold text-primary-foreground transition-colors cursor-pointer"
+                >
+                  Save
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Folder Delete Confirmation Modal */}
+      <AnimatePresence>
+        {deleteFolderId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDeleteFolderId(null)} />
+            
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative z-10 w-full max-w-[360px] rounded-2xl border border-border bg-[#18181b] p-5 shadow-2xl"
+            >
+              <h3 className="text-base font-semibold text-foreground">Delete Folder</h3>
+              <p className="mt-2.5 text-sm text-muted-foreground leading-normal">
+                Are you sure you want to delete this folder? All spaces and knowledge within it will be permanently deleted.
+              </p>
+              <div className="mt-5 flex gap-2">
+                <button
+                  onClick={() => setDeleteFolderId(null)}
+                  className="flex-1 rounded-xl bg-secondary/60 hover:bg-secondary px-4 py-2.5 text-xs font-semibold text-foreground border border-border transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmFolderDelete}
+                  className="flex-1 rounded-xl bg-destructive hover:bg-destructive/90 px-4 py-2.5 text-xs font-semibold text-destructive-foreground transition-colors cursor-pointer"
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
