@@ -226,7 +226,7 @@ export function StudyGuideView({
         setSelectedText("");
         return;
       }
-      
+
       const text = selection.toString();
       const anchorNode = selection.anchorNode;
       let isInsideEditor = false;
@@ -248,7 +248,7 @@ export function StudyGuideView({
       try {
         const range = selection.getRangeAt(0);
         const rect = range.getBoundingClientRect();
-        
+
         setPopupCoords({
           x: rect.left + rect.width / 2,
           y: rect.bottom + 8,
@@ -475,7 +475,7 @@ export function StudyGuideView({
       if (visibilityRef.current && !visibilityRef.current.contains(event.target as Node)) {
         setVisibilityOpen(false);
       }
-      
+
       // Close active line menus on backdrop clicks
       const target = event.target as HTMLElement;
       if (!target.closest(".line-wrapper")) {
@@ -530,13 +530,13 @@ export function StudyGuideView({
     if (lines.length <= 1) return; // Keep at least 1 line
     const idx = lines.findIndex((l) => l.id === id);
     updateLines((prev) => prev.filter((l) => l.id !== id));
-    
+
     if (focusPrev && idx > 0) {
       const prevLine = lines[idx - 1];
       setTimeout(() => {
         const element = document.getElementById(`editable-${prevLine.id}`);
         element?.focus();
-        
+
         // Move caret to end of text
         if (element) {
           const range = document.createRange();
@@ -583,7 +583,7 @@ export function StudyGuideView({
       if (element) {
         element.innerText = "/";
         element.focus();
-        
+
         // Move caret to end of text
         const range = document.createRange();
         const sel = window.getSelection();
@@ -699,9 +699,8 @@ export function StudyGuideView({
                       <button
                         key={res.id}
                         onClick={() => handleSelectResource(res.id)}
-                        className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold hover:bg-[#27272a] transition-colors ${
-                          activeResourceId === res.id ? "text-foreground bg-[#27272a]/60" : "text-muted-foreground"
-                        }`}
+                        className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold hover:bg-[#27272a] transition-colors ${activeResourceId === res.id ? "text-foreground bg-[#27272a]/60" : "text-muted-foreground"
+                          }`}
                       >
                         <div className="flex items-center gap-2 truncate">
                           <FileText size={13} className="text-muted-foreground shrink-0" />
@@ -745,9 +744,8 @@ export function StudyGuideView({
                     <div className="space-y-2">
                       <div
                         onClick={() => handleToggleVisibility("me")}
-                        className={`flex items-start gap-2.5 rounded-xl border p-2.5 cursor-pointer transition-colors ${
-                          visibility === "me" ? "border-foreground bg-[#27272a]/40" : "border-border/80 hover:bg-[#27272a]/20"
-                        }`}
+                        className={`flex items-start gap-2.5 rounded-xl border p-2.5 cursor-pointer transition-colors ${visibility === "me" ? "border-foreground bg-[#27272a]/40" : "border-border/80 hover:bg-[#27272a]/20"
+                          }`}
                       >
                         <div className="flex size-4 items-center justify-center rounded-full border border-muted-foreground shrink-0 mt-0.5">
                           {visibility === "me" && <div className="size-1.5 rounded-full bg-foreground" />}
@@ -762,9 +760,8 @@ export function StudyGuideView({
 
                       <div
                         onClick={() => handleToggleVisibility("members")}
-                        className={`flex items-start gap-2.5 rounded-xl border p-2.5 cursor-pointer transition-colors ${
-                          visibility === "members" ? "border-foreground bg-[#27272a]/40" : "border-border/80 hover:bg-[#27272a]/20"
-                        }`}
+                        className={`flex items-start gap-2.5 rounded-xl border p-2.5 cursor-pointer transition-colors ${visibility === "members" ? "border-foreground bg-[#27272a]/40" : "border-border/80 hover:bg-[#27272a]/20"
+                          }`}
                       >
                         <div className="flex size-4 items-center justify-center rounded-full border border-muted-foreground shrink-0 mt-0.5">
                           {visibility === "members" && <div className="size-1.5 rounded-full bg-foreground" />}
@@ -779,9 +776,8 @@ export function StudyGuideView({
 
                       <div
                         onClick={() => handleToggleVisibility("public")}
-                        className={`flex items-start gap-2.5 rounded-xl border p-2.5 cursor-pointer transition-colors ${
-                          visibility === "public" ? "border-foreground bg-[#27272a]/40" : "border-border/80 hover:bg-[#27272a]/20"
-                        }`}
+                        className={`flex items-start gap-2.5 rounded-xl border p-2.5 cursor-pointer transition-colors ${visibility === "public" ? "border-foreground bg-[#27272a]/40" : "border-border/80 hover:bg-[#27272a]/20"
+                          }`}
                       >
                         <div className="flex size-4 items-center justify-center rounded-full border border-muted-foreground shrink-0 mt-0.5">
                           {visibility === "public" && <div className="size-1.5 rounded-full bg-foreground" />}
@@ -851,9 +847,8 @@ export function StudyGuideView({
       {!chatCollapsed && (
         <div
           onMouseDown={handleMouseDown}
-          className={`w-[3px] hover:w-[6px] cursor-col-resize self-stretch transition-all bg-border/60 hover:bg-primary z-45 ${
-            isDragging ? "bg-primary w-[6px]" : ""
-          }`}
+          className={`w-[3px] hover:w-[6px] cursor-col-resize self-stretch transition-all bg-border/60 hover:bg-primary z-45 ${isDragging ? "bg-primary w-[6px]" : ""
+            }`}
         />
       )}
 
@@ -1016,7 +1011,7 @@ function DocTableBlock({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [setStyleMenuOpen]);
-  
+
   const style = tableData.style || "default";
 
   // Column widths and row heights state
@@ -1108,7 +1103,7 @@ function DocTableBlock({
 
   const handleCellBlur = (rowIndex: number, colIndex: number, val: string) => {
     if (!onUpdateTableData) return;
-    const nextRows = tableData.rows.map((row, rIdx) => 
+    const nextRows = tableData.rows.map((row, rIdx) =>
       rIdx === rowIndex ? row.map((cell, cIdx) => cIdx === colIndex ? val : cell) : row
     );
     onUpdateTableData(line.id, {
@@ -1223,7 +1218,7 @@ function DocTableBlock({
             <Minus size={10} /> Column
           </button>
           <div className="h-3.5 w-[1px] bg-border/60 mx-0.5" />
-          
+
           {/* Style switcher dropdown */}
           <div className="relative">
             <button
@@ -1284,9 +1279,8 @@ function DocTableBlock({
             {tableData.rows.map((row, rowIndex) => (
               <tr
                 key={`row-${rowIndex}`}
-                className={`${trClass} ${
-                  style === "striped" && rowIndex % 2 === 1 ? "bg-[#1c1c1f]/40" : ""
-                }`}
+                className={`${trClass} ${style === "striped" && rowIndex % 2 === 1 ? "bg-[#1c1c1f]/40" : ""
+                  }`}
                 style={{ height: rowHeights[rowIndex] || 42 }}
               >
                 {row.map((cell, colIndex) => (
@@ -1471,7 +1465,7 @@ function DocLineWrapper({
 
   return (
     <div className="relative group flex items-start w-full line-wrapper min-h-[32px]">
-      
+
       {/* HOVER HELPER BUTTONS (Image 1 style) */}
       <div className="absolute -left-[54px] top-1.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10">
         <button

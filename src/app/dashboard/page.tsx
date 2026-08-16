@@ -404,7 +404,7 @@ export default function Dashboard() {
       type: toolId,
       category: forcePrivate ? "private" : (toolId === "chat" ? "private" : "shared"),
       visibility: (forcePrivate || toolId === "chat") ? "me" : "members",
-      isConfigured: toolId !== "quiz" && toolId !== "study-guide" && toolId !== "flashcards" && toolId !== "solve",
+      isConfigured: toolId !== "quiz" && toolId !== "study-guide" && toolId !== "flashcards" && toolId !== "solve" && toolId !== "write",
       resources: [],
       focusedResourceIds: [],
     };
@@ -523,6 +523,22 @@ export default function Dashboard() {
             onBack={handleBackToHub}
           />
         );
+      } else if (activeSpace.type === "write") {
+        mainContent = (
+          <WriteView
+            spaceName={activeSpace.name}
+            visibility={activeSpace.visibility}
+            isConfigured={false}
+            onCompleteConfig={(draftName, generatedText) => {
+              setSpaces((prev) =>
+                prev.map((s) => (s.id === activeSpace.id ? { ...s, name: draftName || s.name, isConfigured: true, plainTextContent: generatedText } : s))
+              );
+              setFolderOpen(false);
+            }}
+            onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
+            onBack={handleBackToHub}
+          />
+        );
       } else {
         // default/chat or other
         mainContent = <Hub onOpen={handleSelectTool} onAskEspada={handleAskEspada} />;
@@ -576,7 +592,16 @@ export default function Dashboard() {
           />
         );
       } else if (activeSpace.type === "write") {
-        mainContent = <WriteView onBack={handleBackToHub} />;
+        mainContent = (
+          <WriteView
+            spaceName={activeSpace.name}
+            visibility={activeSpace.visibility}
+            isConfigured={true}
+            initialDraft={activeSpace.plainTextContent}
+            onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
+            onBack={handleBackToHub}
+          />
+        );
       } else if (activeSpace.type === "recording") {
         mainContent = <RecordingView onBack={handleBackToHub} />;
       } else if (activeSpace.type === "notes") {
