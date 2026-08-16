@@ -1,8 +1,8 @@
 "use client";
 import { useState } from "react";
 import {
-  Folder, ChevronRight, ListChecks, Globe, User, Users,
-  Plus, Play, Sparkles, Eye, EyeOff, Pencil, Trash2, X, Check, GripVertical,
+  Folder, ChevronRight, ChevronDown, ListChecks, Globe, User, Users,
+  Plus, Play, Sparkles, Eye, EyeOff, Pencil, Trash2, X, Check, GripVertical, HelpCircle,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { type VisibilityType } from "./SpaceWizard";
@@ -127,7 +127,54 @@ function QuestionBody({ q, show }: { q: QuizQuestion; show: boolean }) {
   return null;
 }
 
+// ── Custom dark type selector ────────────────────────────────────────────────
+const TYPE_OPTIONS: { value: QuestionType; label: string }[] = [
+  { value: "multiple-choice", label: "Multiple choice" },
+  { value: "true-false",      label: "True or false" },
+  { value: "short-answer",    label: "Short response" },
+  { value: "fill-in-blank",   label: "Fill in the blank" },
+];
+
+function TypeSelect({ value, onChange }: { value: QuestionType; onChange: (t: QuestionType) => void }) {
+  const [open, setOpen] = useState(false);
+  const label = TYPE_OPTIONS.find(o => o.value === value)?.label ?? value;
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between rounded-xl bg-secondary/60 border border-border px-3 py-2.5 text-sm text-foreground outline-none cursor-pointer hover:bg-secondary/80 transition-colors"
+      >
+        <span>{label}</span>
+        <ChevronDown size={14} className={`text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}/>
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+            className="absolute z-50 mt-1 w-full rounded-xl border border-border bg-[#1c1c1f] py-1 shadow-2xl"
+          >
+            {TYPE_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => { onChange(opt.value); setOpen(false); }}
+                className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left transition-colors hover:bg-secondary/50 ${value === opt.value ? "text-foreground font-semibold" : "text-muted-foreground"}`}
+              >
+                {value === opt.value && <Check size={12} className="text-foreground shrink-0"/>}
+                {value !== opt.value && <span className="w-3 shrink-0"/>}
+                {opt.label}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ── Edit / Add modal ────────────────────────────────────────────────────────
+
 function EditModal({ question, onSave, onClose }: {
   question: QuizQuestion | null;
   onSave: (q: QuizQuestion) => void;
@@ -185,16 +232,10 @@ function EditModal({ question, onSave, onClose }: {
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={17}/></button>
         </div>
         <div className="px-5 py-4 space-y-4 max-h-[65vh] overflow-y-auto">
-          {/* Type */}
+          {/* Type — custom dark dropdown */}
           <div>
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Type</p>
-            <select value={type} onChange={e=>onTypeChange(e.target.value as QuestionType)}
-              className="w-full appearance-none rounded-xl bg-secondary/60 border border-border px-3 py-2.5 text-sm text-foreground outline-none cursor-pointer">
-              <option value="multiple-choice">Multiple choice</option>
-              <option value="true-false">True or false</option>
-              <option value="short-answer">Short response</option>
-              <option value="fill-in-blank">Fill in the blank</option>
-            </select>
+            <TypeSelect value={type} onChange={onTypeChange} />
           </div>
           {/* Question */}
           <div>
@@ -332,123 +373,606 @@ function QuestionCard({ q, index, onEdit, onDelete }: {
 }
 
 // ── Quiz Player ──────────────────────────────────────────────────────────────
-function QuizPlayer({ questions, spaceName, onExit }: {
+function QuizPlayer({ questions, spaceName, onExit, onSubmit }: {
   questions: QuizQuestion[]; spaceName: string; onExit:()=>void;
+  onSubmit: (score: number, results: {
+    mc: Record<string, number[]>;
+    tf: Record<string, number>;
+    sa: Record<string, string>;
+    fib: Record<string, string>;
+  }) => void;
 }) {
   const [cur, setCur] = useState(0);
   const [mc, setMc] = useState<Record<string,number[]>>({});
   const [tf, setTf] = useState<Record<string,number>>({});
   const [sa, setSa] = useState<Record<string,string>>({});
   const [fib, setFib] = useState<Record<string,string>>({});
-  const [done, setDone] = useState(false);
-  const [score, setScore] = useState(0);
+  // For multi-select MCQ, short-answer, and fill-in-blank, show explanation after Next is clicked
+  const [showExplanation, setShowExplanation] = useState<Record<string,boolean>>({});
+  const [jumpOpen, setJumpOpen] = useState(false);
 
-  const q = questions[cur];
+  const q = questions[cur]!;
   const isLast = cur === questions.length - 1;
 
-  const submit = () => {
-    let c = 0;
-    questions.forEach(q => {
-      if (q.type==="multiple-choice") {
-        const a=mc[q.id]??[]; const e=q.correctOptions??[];
-        if(a.length===e.length && e.every(x=>a.includes(x))) c++;
-      } else if (q.type==="true-false") {
-        if((q.correctOptions??[])[0]===(tf[q.id]??-1)) c++;
-      } else if (q.type==="short-answer") {
-        if((sa[q.id]??"").trim().length>0) c++;
-      } else {
-        if((fib[q.id]??"").trim().toLowerCase()===(q.answer??"").toLowerCase()) c++;
-      }
-    });
-    setScore(c); setDone(true);
+  const isAnswered = (idx: number) => {
+    const qq = questions[idx]!;
+    if (qq.type==="multiple-choice") return (mc[qq.id]??[]).length > 0;
+    if (qq.type==="true-false")      return tf[qq.id] !== undefined;
+    if (qq.type==="short-answer")    return (sa[qq.id]??"").trim().length > 0;
+    return (fib[qq.id]??"").trim().length > 0;
   };
 
-  if (done) {
-    const pct = Math.round((score/questions.length)*100);
-    return (
-      <div className="mx-auto w-full max-w-2xl px-6 py-20 flex flex-col items-center gap-5">
-        <div className="text-7xl font-bold text-foreground">{pct}%</div>
-        <p className="text-lg font-semibold text-foreground">{score} / {questions.length} correct</p>
-        <p className="text-sm text-muted-foreground text-center max-w-xs">
-          {pct>=80?"Great job! You have a strong grasp of this material.":pct>=50?"Good effort! Review the missed questions to improve.":"Keep practicing — you will get there!"}
-        </p>
-        <button onClick={onExit} className="mt-4 rounded-xl bg-foreground text-background hover:opacity-90 px-8 py-2.5 text-sm font-semibold">
-          Back to questions
-        </button>
-      </div>
-    );
-  }
+  const hasAnswered      = isAnswered(cur);
+  const mcSel            = mc[q.id]??[];
+  const isMultiSelect    = q.type === "multiple-choice" && (q.correctOptions ?? []).length > 1;
 
-  const toggleMC = (i:number) => setMc(p=>({...p,[q.id]:(p[q.id]??[]).includes(i)?(p[q.id]??[]).filter(x=>x!==i):[...(p[q.id]??[]),i]}));
+  // Revealed means styling correct/incorrect choices and displaying explanation
+  const revealed = (q.type === "true-false" && tf[q.id] !== undefined)
+    || (q.type === "multiple-choice" && !isMultiSelect && mcSel.length > 0)
+    || (showExplanation[q.id] ?? false);
+
+  const inExplanation    = (q.type === "short-answer" || q.type === "fill-in-blank") && (showExplanation[q.id] ?? false);
+  const fibCorrect       = q.type==="fill-in-blank" && (fib[q.id]??"").trim().toLowerCase() === (q.answer??"").toLowerCase();
+
+  const toggleMC = (i: number) => {
+    if (revealed) return;
+    if (isMultiSelect) {
+      setMc(p => {
+        const current = p[q.id] ?? [];
+        const next = current.includes(i) ? current.filter(x => x !== i) : [...current, i];
+        return { ...p, [q.id]: next };
+      });
+    } else {
+      setMc(p => ({ ...p, [q.id]: [i] }));
+    }
+  };
+
+  const calcScore = () => {
+    let c = 0;
+    questions.forEach(qq => {
+      if (qq.type==="multiple-choice") {
+        const a=mc[qq.id]??[]; const e=qq.correctOptions??[];
+        if(a.length===e.length && e.every(x=>a.includes(x))) c++;
+      } else if (qq.type==="true-false") {
+        if((qq.correctOptions??[])[0]===(tf[qq.id]??-1)) c++;
+      } else if (qq.type==="short-answer") {
+        if((sa[qq.id]??"").trim().length>0) c++;
+      } else {
+        if((fib[qq.id]??"").trim().toLowerCase()===(qq.answer??"").toLowerCase()) c++;
+      }
+    });
+    return c;
+  };
+
+  const handleNext = () => {
+    // If it requires showing the explanation panel/screen first before moving on:
+    if ((isMultiSelect || q.type === "short-answer" || q.type === "fill-in-blank") && hasAnswered && !revealed) {
+      setShowExplanation(p => ({...p, [q.id]: true}));
+      return;
+    }
+    // Proceed or submit
+    if (isLast) {
+      const finalScore = calcScore();
+      onSubmit(finalScore, { mc, tf, sa, fib });
+      return;
+    }
+    setCur(c => c + 1);
+  };
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-6 py-8 flex flex-col min-h-[calc(100vh-60px)]">
-      <div className="flex items-center justify-between mb-6 shrink-0">
-        <button onClick={onExit} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <X size={14}/> Exit
+    <div className="flex flex-col bg-[#0c0c0d] h-full w-full">
+
+      {/* ── TOP BREADCRUMB ───────────────────────────────────────────────── */}
+      <div className="shrink-0 flex items-center justify-between px-8 py-4">
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Folder size={13} className="shrink-0"/>
+          <span>My folder</span>
+          <ChevronRight size={12}/>
+          <ListChecks size={13} className="shrink-0"/>
+          <span className="font-semibold text-foreground">{spaceName}</span>
+        </div>
+        <button onClick={onExit}
+          className="flex items-center gap-1.5 rounded-lg border border-border bg-[#1c1c1f] hover:bg-[#27272a] px-3 py-1.5 text-xs font-semibold text-foreground transition-colors">
+          <X size={13}/> Close
         </button>
-        <span className="text-xs font-semibold text-muted-foreground">{cur+1} / {questions.length}</span>
-        <span className="text-xs font-semibold text-foreground">{spaceName}</span>
       </div>
-      <div className="h-1 w-full bg-secondary/60 rounded-full mb-8 shrink-0">
-        <div className="h-1 bg-foreground rounded-full transition-all" style={{width:`${((cur+1)/questions.length)*100}%`}}/>
+
+      {/* ── SCROLLABLE CONTENT ──────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-[600px] px-4 py-14">
+
+          {/* Question label */}
+          <p className="text-xs font-semibold text-muted-foreground mb-4">Question {cur+1}</p>
+
+          {/* Question text */}
+          <h2 className="text-2xl font-bold text-foreground leading-snug mb-8">{q.question}</h2>
+
+          {/* ── ANSWER AREA (hidden during explanation screen) ──────────── */}
+          {!inExplanation && (
+            <>
+              {/* Multiple choice */}
+              {q.type==="multiple-choice" && (
+                <div className="space-y-2.5">
+                  {(q.options??[]).map((opt,i) => {
+                    const sel     = mcSel.includes(i);
+                    const correct = (q.correctOptions??[]).includes(i);
+                    const isGreen = revealed && correct;
+                    const isRed   = revealed && sel && !correct;
+                    const isActive = !revealed && sel;
+                    return (
+                      <button key={i} onClick={() => toggleMC(i)}
+                        className={[
+                          "w-full flex items-center gap-3.5 rounded-xl border px-4 py-3.5 text-sm font-medium text-left transition-colors",
+                          isGreen ? "border-emerald-500/60 bg-emerald-500/10 text-foreground"
+                            : isRed ? "border-destructive/50 bg-destructive/10 text-foreground"
+                            : isActive ? "border-foreground/40 bg-[#222225] text-foreground"
+                            : "border-[#2a2a2d] bg-[#1a1a1d] hover:bg-[#222225] text-foreground",
+                        ].join(" ")}>
+                        <span className={[
+                          "shrink-0 flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors",
+                          isGreen ? "border-emerald-500" : isRed ? "border-destructive/60" : isActive ? "border-white" : "border-[#555]",
+                        ].join(" ")}>
+                          {isGreen ? (
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                          ) : isRed ? (
+                            <span className="h-2.5 w-2.5 rounded-full bg-destructive" />
+                          ) : isActive ? (
+                            <span className="h-2.5 w-2.5 rounded-full bg-white" />
+                          ) : null}
+                        </span>
+                        <span>{opt}</span>
+                      </button>
+                    );
+                  })}
+                  {/* Explain why / explanation directly below for single/revealed */}
+                  {revealed && (
+                    <div className="pt-4">
+                      <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Explanation</p>
+                      <div className="rounded-xl border border-[#2a2a2d] bg-[#1a1a1d] px-4 py-4 text-sm text-foreground/80 leading-relaxed">
+                        {(q.correctOptions??[]).length > 0 ? (
+                          <div>
+                            <span className="font-bold text-foreground block mb-1">Correct Answer:</span>
+                            {(q.correctOptions??[]).map(idx => (q.options??[])[idx]).join(", ")}
+                          </div>
+                        ) : (
+                          "No explanation available."
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* True / False */}
+              {q.type==="true-false" && (
+                <div className="space-y-2.5">
+                  {["True","False"].map((lbl,i) => {
+                    const sel = tf[q.id] === i;
+                    const correct = (q.correctOptions??[]).includes(i);
+                    const isGreen = revealed && correct;
+                    const isRed   = revealed && sel && !correct;
+                    const isActive = !revealed && sel;
+                    return (
+                      <button key={lbl} onClick={() => !revealed && setTf(p=>({...p,[q.id]:i}))}
+                        className={[
+                          "w-full flex items-center gap-3.5 rounded-xl border px-4 py-3.5 text-sm font-semibold text-left transition-colors",
+                          isGreen ? "border-emerald-500/60 bg-emerald-500/10 text-foreground"
+                            : isRed ? "border-destructive/50 bg-destructive/10 text-foreground"
+                            : isActive ? "border-foreground/40 bg-[#222225] text-foreground"
+                            : "border-[#2a2a2d] bg-[#1a1a1d] hover:bg-[#222225] text-foreground",
+                        ].join(" ")}>
+                        <span className={[
+                          "shrink-0 flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors",
+                          isGreen ? "border-emerald-500" : isRed ? "border-destructive/60" : isActive ? "border-white" : "border-[#555]",
+                        ].join(" ")}>
+                          {isGreen ? (
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                          ) : isRed ? (
+                            <span className="h-2.5 w-2.5 rounded-full bg-destructive" />
+                          ) : isActive ? (
+                            <span className="h-2.5 w-2.5 rounded-full bg-white" />
+                          ) : null}
+                        </span>
+                        {lbl}
+                      </button>
+                    );
+                  })}
+                  {revealed && (
+                    <div className="pt-4">
+                      <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Explanation</p>
+                      <div className="rounded-xl border border-[#2a2a2d] bg-[#1a1a1d] px-4 py-4 text-sm text-foreground/80 leading-relaxed">
+                        {(q.correctOptions??[]).length > 0 ? (
+                          <div>
+                            <span className="font-bold text-foreground block mb-1">Correct Answer:</span>
+                            {(q.correctOptions??[]).map(idx => (["True", "False"])[idx]).join(", ")}
+                          </div>
+                        ) : (
+                          "No explanation available."
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Short answer */}
+              {q.type==="short-answer" && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Short response</p>
+                  <textarea rows={6} placeholder="Type your answer here"
+                    value={sa[q.id]??""} onChange={e => setSa(p=>({...p,[q.id]:e.target.value}))}
+                    className="w-full rounded-xl bg-[#1c1c1f] border border-[#2a2a2d] px-4 py-3 text-sm text-foreground placeholder:text-[#555] outline-none resize-none focus:border-[#444] transition-colors"/>
+                  {q.matchMode && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {q.matchMode==="Has exact same meaning, can be phrased differently"
+                        ? "Your answer must have similar meaning but can be phrased differently."
+                        : q.matchMode==="Exact wording required"
+                        ? "Your answer must match exactly."
+                        : q.matchMode}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Fill in blank */}
+              {q.type==="fill-in-blank" && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Fill in the blank</p>
+                  <input placeholder="Type your answer here"
+                    value={fib[q.id]??""} onChange={e => setFib(p=>({...p,[q.id]:e.target.value}))}
+                    className="w-full rounded-xl bg-[#1c1c1f] border border-[#2a2a2d] px-4 py-3 text-sm text-foreground placeholder:text-[#555] outline-none focus:border-[#444] transition-colors"/>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── EXPLANATION SCREEN (Short / FIB after "Next") ──────────── */}
+          {inExplanation && (
+            <motion.div initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} className="space-y-4">
+              {/* User's answer readout */}
+              {q.type==="fill-in-blank" && (
+                <>
+                  <input readOnly value={fib[q.id]??""}
+                    className="w-full rounded-xl bg-[#1c1c1f] border border-[#2a2a2d] px-4 py-3 text-sm text-foreground outline-none"/>
+                  <div className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${fibCorrect?"bg-emerald-500/15 text-emerald-400":"bg-red-500/15 text-red-400"}`}>
+                    {fibCorrect
+                      ? <><Check size={15}/> That&#39;s correct!</>
+                      : <><X size={15}/> Oops, that&#39;s not correct.</>}
+                  </div>
+                </>
+              )}
+              {q.type==="short-answer" && (
+                <div className="rounded-xl bg-[#1c1c1f] border border-[#2a2a2d] px-4 py-3 min-h-[48px] text-sm text-foreground">
+                  {sa[q.id]??""}
+                </div>
+              )}
+
+              {/* Explanation section */}
+              <div className="pt-2">
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mb-5">Explanation</p>
+                <h3 className="text-base font-bold text-foreground mb-2">Correct Answer</h3>
+                <p className="text-sm text-foreground/75 leading-relaxed mb-6">
+                  {q.type==="fill-in-blank"
+                    ? `"${q.answer}" is the correct answer because it completes the sentence accurately.`
+                    : q.exampleAnswer ?? "See the correct answer above."}
+                </p>
+                {((q.type==="fill-in-blank" && !fibCorrect) || q.type==="short-answer") && (
+                  <>
+                    <h3 className="text-base font-bold text-foreground mb-2">Your Answer</h3>
+                    <p className="text-sm text-foreground/60 leading-relaxed">
+                      {q.type==="fill-in-blank"
+                        ? `"${fib[q.id]??""}" is not the correct answer for this question.`
+                        : `"${sa[q.id]??""}" — compare with the example answer above.`}
+                    </p>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </div>
       </div>
-      <div className="flex-1">
-        <p className="text-lg font-semibold text-foreground leading-relaxed mb-6">{q.question}</p>
-        {q.type==="multiple-choice" && (
-          <div className="space-y-2.5">
-            {(q.options??[]).map((opt,i)=>(
-              <button key={i} onClick={()=>toggleMC(i)}
-                className={`w-full text-left rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${(mc[q.id]??[]).includes(i)?"border-foreground bg-secondary text-foreground":"border-border bg-[#18181b] text-foreground/70 hover:bg-secondary/40"}`}>
-                <span className="font-semibold mr-2">{String.fromCharCode(65+i)}.</span>{opt}
-              </button>
-            ))}
+
+      {/* ── BOTTOM BAR ─────────────────────────────────────────────────── */}
+      <div className="shrink-0 border-t border-[#1e1e21] bg-[#0c0c0d] px-8 py-3.5">
+        <div className="mx-auto max-w-[600px] flex items-center gap-4">
+
+          {/* Question jump selector */}
+          <div className="relative shrink-0">
+            <button onClick={() => setJumpOpen(v => !v)}
+              className="flex items-center gap-1.5 rounded-lg border border-[#2a2a2d] bg-[#1a1a1d] hover:bg-[#222225] px-3 py-1.5 text-xs font-semibold text-foreground transition-colors whitespace-nowrap">
+              {cur+1} of {questions.length}
+              <ChevronDown size={12} className={`transition-transform ${jumpOpen?"rotate-180":""}`}/>
+            </button>
+            <AnimatePresence>
+              {jumpOpen && (
+                <motion.div initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} exit={{opacity:0,y:6}}
+                  className="absolute bottom-full mb-2 left-0 w-[190px] rounded-xl border border-[#2a2a2d] bg-[#151517] py-1.5 shadow-2xl z-50 max-h-[300px] overflow-y-auto">
+                  {questions.map((_,i) => (
+                    <button key={i} onClick={() => { setCur(i); setJumpOpen(false); setShowExplanation({}); }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold transition-colors hover:bg-[#222225] ${i===cur?"text-foreground":"text-muted-foreground"}`}>
+                      <span className={`shrink-0 flex h-4 w-4 items-center justify-center rounded-full border-[1.5px] transition-colors ${isAnswered(i)?"border-emerald-500":"border-[#444]"}`}>
+                        {isAnswered(i) && <span className="h-2 w-2 rounded-full bg-emerald-500"/>}
+                      </span>
+                      Question {i+1}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-        )}
-        {q.type==="true-false" && (
-          <div className="flex gap-3">
-            {["True","False"].map((lbl,i)=>(
-              <button key={lbl} onClick={()=>setTf(p=>({...p,[q.id]:i}))}
-                className={`flex-1 rounded-xl border px-4 py-3.5 text-sm font-semibold transition-colors ${tf[q.id]===i?"border-foreground bg-secondary text-foreground":"border-border bg-[#18181b] text-foreground/70 hover:bg-secondary/40"}`}>
-                {lbl}
-              </button>
-            ))}
+
+          {/* Progress bar */}
+          <div className="flex-1 h-[3px] bg-[#2a2a2d] rounded-full overflow-hidden">
+            <div className="h-[3px] bg-foreground rounded-full transition-all duration-300"
+              style={{width:`${((cur+1)/questions.length)*100}%`}}/>
           </div>
-        )}
-        {q.type==="short-answer" && (
-          <textarea rows={5} placeholder="Write your answer here..." value={sa[q.id]??""} onChange={e=>setSa(p=>({...p,[q.id]:e.target.value}))}
-            className="w-full rounded-xl bg-[#18181b] border border-border px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none resize-none"/>
-        )}
-        {q.type==="fill-in-blank" && (
-          <input placeholder="Fill in the blank..." value={fib[q.id]??""} onChange={e=>setFib(p=>({...p,[q.id]:e.target.value}))}
-            className="w-full rounded-xl bg-[#18181b] border border-border px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/40 outline-none"/>
-        )}
+
+          {/* Next / Submit */}
+          <button onClick={handleNext}
+            className="shrink-0 rounded-xl bg-[#f4f4f5] text-[#18181b] hover:bg-white px-6 py-2 text-sm font-bold transition-colors">
+            {isLast && revealed ? "Submit" : "Next"}
+          </button>
+        </div>
       </div>
-      <div className="flex gap-3 mt-8 shrink-0">
-        {cur>0 && <button onClick={()=>setCur(c=>c-1)} className="flex-1 rounded-xl border border-border bg-[#27272a]/60 hover:bg-[#27272a] py-2.5 text-sm font-semibold text-foreground">Previous</button>}
-        {!isLast
-          ? <button onClick={()=>setCur(c=>c+1)} className="flex-1 rounded-xl bg-foreground text-background hover:opacity-90 py-2.5 text-sm font-semibold">Next</button>
-          : <button onClick={submit} className="flex-1 rounded-xl bg-foreground text-background hover:opacity-90 py-2.5 text-sm font-semibold">Submit</button>
-        }
-      </div>
+    </div>
+  );
+}
+
+
+// ── Results Scorecard Modal ──────────────────────────────────────────────────
+function ResultsModal({ results, questions, onClose }: {
+  results: {
+    score: number;
+    answers: {
+      mc: Record<string, number[]>;
+      tf: Record<string, number>;
+      sa: Record<string, string>;
+      fib: Record<string, string>;
+    };
+  };
+  questions: QuizQuestion[];
+  onClose: () => void;
+}) {
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const q = questions[selectedIdx]!;
+  const answers = results.answers;
+
+  const isCorrect = (currQ: QuizQuestion) => {
+    if (currQ.type === "multiple-choice") {
+      const a = answers.mc[currQ.id] ?? [];
+      const e = currQ.correctOptions ?? [];
+      return a.length === e.length && e.every(x => a.includes(x));
+    }
+    if (currQ.type === "true-false") {
+      const a = answers.tf[currQ.id];
+      const e = currQ.correctOptions ?? [];
+      return e[0] === a;
+    }
+    if (currQ.type === "fill-in-blank") {
+      const a = answers.fib[currQ.id] ?? "";
+      return a.trim().toLowerCase() === (currQ.answer ?? "").trim().toLowerCase();
+    }
+    if (currQ.type === "short-answer") {
+      const a = answers.sa[currQ.id] ?? "";
+      return a.trim().length > 0;
+    }
+    return false;
+  };
+
+  const pct = Math.round((results.score / questions.length) * 100);
+  const formattedDate = new Date().toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose}/>
+      <motion.div initial={{opacity:0,scale:0.96,y:8}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:0.96,y:8}}
+        className="relative z-10 w-full max-w-[760px] h-[80vh] max-h-[620px] rounded-2xl border border-border bg-[#18181b] shadow-2xl overflow-hidden flex flex-col text-left">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div>
+            <h2 className="text-base font-bold text-foreground">Quiz results</h2>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Started {formattedDate}</p>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={17}/></button>
+        </div>
+
+        {/* Stats Row */}
+        <div className="grid grid-cols-2 gap-3 px-6 py-4 border-b border-border bg-secondary/20">
+          <div className="rounded-xl border border-border bg-[#1c1c1f] p-4">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Your score</p>
+            <p className="text-2xl font-bold text-foreground">{pct}%</p>
+          </div>
+          <div className="rounded-xl border border-border bg-[#1c1c1f] p-4">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Correct</p>
+            <p className="text-2xl font-bold text-foreground">{results.score} of {questions.length}</p>
+          </div>
+        </div>
+
+        {/* Two Columns */}
+        <div className="flex-1 flex min-h-0 divide-x divide-border">
+          {/* Left Column: Questions List */}
+          <div className="w-[200px] overflow-y-auto p-2 space-y-1 bg-[#1a1a1d]">
+            {questions.map((currQ, i) => {
+              const ok = isCorrect(currQ);
+              const active = i === selectedIdx;
+              return (
+                <button key={currQ.id} onClick={() => setSelectedIdx(i)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors ${
+                    active ? "bg-secondary/70 text-foreground" : "text-muted-foreground hover:bg-secondary/30 hover:text-foreground"
+                  }`}>
+                  <span className={`shrink-0 flex h-4.5 w-4.5 items-center justify-center rounded-full border ${
+                    ok ? "border-emerald-500 bg-emerald-500/10 text-emerald-500" : "border-destructive bg-destructive/10 text-destructive"
+                  }`}>
+                    {ok ? <Check size={11}/> : <X size={11}/>}
+                  </span>
+                  <span className="truncate">Question {i+1}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right Column: Question Details */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <h3 className="text-lg font-bold text-foreground leading-snug">{q.question}</h3>
+
+            {/* Answer Display */}
+            <div className="space-y-3">
+              {q.type === "multiple-choice" && (
+                <div className="space-y-2">
+                  {(q.options??[]).map((opt, i) => {
+                    const sel = (answers.mc[q.id]??[]).includes(i);
+                    const correct = (q.correctOptions??[]).includes(i);
+                    const isGreen = correct;
+                    const isRed = sel && !correct;
+                    return (
+                      <div key={i} className={`flex items-center gap-3.5 rounded-xl border px-4 py-3.5 text-sm font-medium ${
+                        isGreen ? "border-emerald-500/60 bg-emerald-500/10 text-foreground"
+                          : isRed ? "border-destructive/50 bg-destructive/10 text-foreground"
+                          : "border-[#2a2a2d] bg-[#1a1a1d] text-muted-foreground"
+                      }`}>
+                        <span className={`shrink-0 flex h-5 w-5 items-center justify-center rounded-full border-2 ${
+                          isGreen ? "border-emerald-500" : isRed ? "border-destructive/60" : "border-[#555]"
+                        }`}>
+                          {isGreen ? (
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                          ) : isRed ? (
+                            <span className="h-2.5 w-2.5 rounded-full bg-destructive" />
+                          ) : null}
+                        </span>
+                        <span>{opt}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {q.type === "true-false" && (
+                <div className="space-y-2">
+                  {["True","False"].map((lbl, i) => {
+                    const sel = answers.tf[q.id] === i;
+                    const correct = (q.correctOptions??[]).includes(i);
+                    const isGreen = correct;
+                    const isRed = sel && !correct;
+                    return (
+                      <div key={lbl} className={`flex items-center gap-3.5 rounded-xl border px-4 py-3.5 text-sm font-semibold ${
+                        isGreen ? "border-emerald-500/60 bg-emerald-500/10 text-foreground"
+                          : isRed ? "border-destructive/50 bg-destructive/10 text-foreground"
+                          : "border-[#2a2a2d] bg-[#1a1a1d] text-muted-foreground"
+                      }`}>
+                        <span className={`shrink-0 flex h-5 w-5 items-center justify-center rounded-full border-2 ${
+                          isGreen ? "border-emerald-500" : isRed ? "border-destructive/60" : "border-[#555]"
+                        }`}>
+                          {isGreen ? (
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                          ) : isRed ? (
+                            <span className="h-2.5 w-2.5 rounded-full bg-destructive" />
+                          ) : null}
+                        </span>
+                        {lbl}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {q.type === "short-answer" && (
+                <div className="space-y-4">
+                  <div>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Your Answer</span>
+                    <div className="rounded-xl border border-border bg-[#1c1c1f] px-4 py-3 text-sm text-foreground">
+                      {answers.sa[q.id] || <span className="text-muted-foreground/45 italic">No answer provided</span>}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Correct Answer</span>
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm text-foreground">
+                      {q.exampleAnswer}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {q.type === "fill-in-blank" && (
+                <div className="space-y-4">
+                  <div>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Your Answer</span>
+                    <div className="rounded-xl border border-border bg-[#1c1c1f] px-4 py-3 text-sm text-foreground">
+                      {answers.fib[q.id] || <span className="text-muted-foreground/45 italic">No answer provided</span>}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Correct Answer</span>
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm text-foreground">
+                      {q.answer}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Explanation panel */}
+            <div className="pt-2">
+              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Explanation</p>
+              <div className="rounded-xl border border-[#2a2a2d] bg-[#1a1a1d] px-4 py-4 text-sm text-foreground/80 leading-relaxed">
+                {q.type === "multiple-choice" || q.type === "true-false" ? (
+                  (q.correctOptions??[]).length > 0 ? (
+                    <div>
+                      <span className="font-bold text-foreground block mb-1">Correct Answer:</span>
+                      {q.type === "true-false"
+                        ? (q.correctOptions??[]).map(idx => (["True", "False"])[idx]).join(", ")
+                        : (q.correctOptions??[]).map(idx => (q.options??[])[idx]).join(", ")}
+                    </div>
+                  ) : (
+                    "No explanation available."
+                  )
+                ) : q.type === "fill-in-blank" ? (
+                  `"${q.answer}" is the correct answer because it completes the sentence accurately.`
+                ) : (
+                  q.exampleAnswer ?? "See the correct answer above."
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </motion.div>
     </div>
   );
 }
 
 // ── Main export ──────────────────────────────────────────────────────────────
 export function QuizEditor({
-  spaceName, visibility, initialQuestions, onTakeQuiz, onGenerateQuestions,
+  spaceName, visibility: initialVisibility, initialQuestions, onTakeQuiz, onGenerateQuestions, onUpdateVisibility,
 }: {
   spaceName: string; visibility: VisibilityType;
   initialQuestions?: QuizQuestion[];
   onTakeQuiz: () => void; onGenerateQuestions: () => void;
+  onUpdateVisibility?: (vis: VisibilityType) => void;
 }) {
+  const [visibility, setVisibility] = useState<VisibilityType>(initialVisibility);
+  const [visOpen, setVisOpen] = useState(false);
   const [questions, setQuestions] = useState<QuizQuestion[]>(initialQuestions ?? makeDemoQuestions(spaceName));
   const [editQ, setEditQ] = useState<QuizQuestion | null>(null);
   const [showEdit, setShowEdit] = useState(false);
   const [showTake, setShowTake] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [shuffle, setShuffle] = useState(false);
+  const [results, setResults] = useState<{
+    score: number;
+    answers: {
+      mc: Record<string, number[]>;
+      tf: Record<string, number>;
+      sa: Record<string, string>;
+      fib: Record<string, string>;
+    };
+  } | null>(null);
 
   const openEdit = (q: QuizQuestion) => { setEditQ(q); setShowEdit(true); };
   const openAdd  = () => { setEditQ(null); setShowEdit(true); };
@@ -458,12 +982,27 @@ export function QuizEditor({
   });
   const deleteQ = (id:string) => setQuestions(p=>p.filter(q=>q.id!==id));
 
-  const visIcon = visibility==="me"?<User size={13}/>:visibility==="members"?<Users size={13}/>:<Globe size={13}/>;
+  const handleSetVisibility = (vis: VisibilityType) => {
+    setVisibility(vis);
+    setVisOpen(false);
+    onUpdateVisibility?.(vis);
+  };
+
   const visLabel = visibility==="me"?"Just me":visibility==="members"?"Folder Members":"Public";
 
   if (playing) {
     const qs = shuffle ? [...questions].sort(()=>Math.random()-0.5) : questions;
-    return <QuizPlayer questions={qs} spaceName={spaceName} onExit={()=>setPlaying(false)}/>;
+    return (
+      <QuizPlayer
+        questions={qs}
+        spaceName={spaceName}
+        onExit={()=>setPlaying(false)}
+        onSubmit={(score, answers) => {
+          setResults({ score, answers });
+          setPlaying(false);
+        }}
+      />
+    );
   }
 
   return (
@@ -474,7 +1013,46 @@ export function QuizEditor({
           <Folder size={14}/><span>My folder</span><ChevronRight size={13}/>
           <ListChecks size={14}/><span className="font-medium text-foreground">{spaceName}</span>
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-semibold">{visIcon}<span>{visLabel}</span></div>
+        <div className="relative">
+          <button
+            onClick={() => setVisOpen(v => !v)}
+            className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground hover:text-foreground transition-colors uppercase tracking-wider cursor-pointer"
+          >
+            <Globe size={12}/>
+            <span>{visLabel}</span>
+            <ChevronDown size={10}/>
+          </button>
+          <AnimatePresence>
+            {visOpen && (
+              <motion.div
+                initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}}
+                className="absolute right-0 mt-2 w-[260px] rounded-[18px] border border-border bg-[#1c1c1f] p-4 shadow-2xl z-50 text-left"
+              >
+                <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block mb-3">Who can access this space?</span>
+                <div className="space-y-2">
+                  {(["me","members","public"] as VisibilityType[]).map((v) => {
+                    const label = v==="me"?"Just me":v==="members"?"Members in this folder":"Anyone on the web";
+                    const sub = v==="me"?"Only you can view and edit":v==="members"?"1 member can view and edit":"Anyone can view, only you can edit";
+                    return (
+                      <div key={v} onClick={()=>handleSetVisibility(v)}
+                        className={`flex items-start gap-2.5 rounded-xl border p-2.5 cursor-pointer transition-colors ${
+                          visibility===v?"border-foreground bg-[#27272a]/40":"border-border/80 hover:bg-[#27272a]/20"
+                        }`}>
+                        <div className="flex size-4 items-center justify-center rounded-full border border-muted-foreground shrink-0 mt-0.5">
+                          {visibility===v && <div className="size-1.5 rounded-full bg-foreground"/>}
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-foreground block">{label}</span>
+                          <span className="text-[9px] text-muted-foreground block mt-0.5">{sub}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* Title */}
@@ -519,6 +1097,7 @@ export function QuizEditor({
       <AnimatePresence>
         {showEdit && <EditModal question={editQ} onSave={saveQ} onClose={()=>setShowEdit(false)}/>}
         {showTake && <TakeQuizModal onClose={()=>setShowTake(false)} onStart={(s)=>{setShuffle(s);setPlaying(true);}}/>}
+        {results && <ResultsModal results={results} questions={questions} onClose={() => setResults(null)} />}
       </AnimatePresence>
     </div>
   );

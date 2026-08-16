@@ -1002,6 +1002,20 @@ function DocTableBlock({
     ],
     style: "default" as const
   };
+
+  const [isSelected, setIsSelected] = useState(false);
+  const tableRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (tableRef.current && !tableRef.current.contains(event.target as Node)) {
+        setIsSelected(false);
+        setStyleMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [setStyleMenuOpen]);
   
   const style = tableData.style || "default";
 
@@ -1177,67 +1191,69 @@ function DocTableBlock({
   const totalTableWidth = colWidths.reduce((a, b) => a + b, 0);
 
   return (
-    <div className="w-full my-4 relative group/table select-text">
+    <div ref={tableRef} onClick={() => setIsSelected(true)} className="w-full my-4 relative group/table select-text">
       {/* TABLE ACTIONS TOOLBAR */}
-      <div className="flex items-center gap-1.5 mb-2 py-1 px-2.5 bg-[#18181b] border border-border/80 rounded-xl max-w-max select-none shadow-lg animate-in fade-in zoom-in-95 duration-100">
-        <button
-          onClick={handleAddRow}
-          className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-[#27272a] px-2 py-1 rounded transition-all cursor-pointer"
-        >
-          <Plus size={10} /> Row
-        </button>
-        <button
-          onClick={handleRemoveRow}
-          disabled={tableData.rows.length <= 1}
-          className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:text-destructive disabled:opacity-40 disabled:hover:text-muted-foreground hover:bg-[#27272a] px-2 py-1 rounded transition-all cursor-pointer"
-        >
-          <Minus size={10} /> Row
-        </button>
-        <div className="h-3.5 w-[1px] bg-border/60 mx-0.5" />
-        <button
-          onClick={handleAddCol}
-          className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-[#27272a] px-2 py-1 rounded transition-all cursor-pointer"
-        >
-          <Plus size={10} /> Column
-        </button>
-        <button
-          onClick={handleRemoveCol}
-          disabled={tableData.headers.length <= 1}
-          className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:text-destructive disabled:opacity-40 disabled:hover:text-muted-foreground hover:bg-[#27272a] px-2 py-1 rounded transition-all cursor-pointer"
-        >
-          <Minus size={10} /> Column
-        </button>
-        <div className="h-3.5 w-[1px] bg-border/60 mx-0.5" />
-        
-        {/* Style switcher dropdown */}
-        <div className="relative">
+      {isSelected && (
+        <div className="flex items-center gap-1.5 mb-2 py-1 px-2.5 bg-[#18181b] border border-border/80 rounded-xl max-w-max select-none shadow-lg animate-in fade-in zoom-in-95 duration-100">
           <button
-            onClick={() => setStyleMenuOpen(!styleMenuOpen)}
-            className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-[#27272a] px-2 py-1 rounded transition-all cursor-pointer capitalize"
+            onClick={handleAddRow}
+            className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-[#27272a] px-2 py-1 rounded transition-all cursor-pointer"
           >
-            <span>Style: {style}</span>
-            <ChevronRight size={8} className="rotate-90 text-muted-foreground" />
+            <Plus size={10} /> Row
           </button>
+          <button
+            onClick={handleRemoveRow}
+            disabled={tableData.rows.length <= 1}
+            className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:text-destructive disabled:opacity-40 disabled:hover:text-muted-foreground hover:bg-[#27272a] px-2 py-1 rounded transition-all cursor-pointer"
+          >
+            <Minus size={10} /> Row
+          </button>
+          <div className="h-3.5 w-[1px] bg-border/60 mx-0.5" />
+          <button
+            onClick={handleAddCol}
+            className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-[#27272a] px-2 py-1 rounded transition-all cursor-pointer"
+          >
+            <Plus size={10} /> Column
+          </button>
+          <button
+            onClick={handleRemoveCol}
+            disabled={tableData.headers.length <= 1}
+            className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:text-destructive disabled:opacity-40 disabled:hover:text-muted-foreground hover:bg-[#27272a] px-2 py-1 rounded transition-all cursor-pointer"
+          >
+            <Minus size={10} /> Column
+          </button>
+          <div className="h-3.5 w-[1px] bg-border/60 mx-0.5" />
+          
+          {/* Style switcher dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setStyleMenuOpen(!styleMenuOpen)}
+              className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-[#27272a] px-2 py-1 rounded transition-all cursor-pointer capitalize"
+            >
+              <span>Style: {style}</span>
+              <ChevronRight size={8} className="rotate-90 text-muted-foreground" />
+            </button>
 
-          {styleMenuOpen && (
-            <div className="absolute left-0 top-full mt-1.5 w-[130px] bg-[#1c1c1f] border border-border/80 rounded-xl p-1 shadow-2xl z-50 text-left">
-              {(["default", "striped", "clean", "glass"] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => {
-                    handleChangeStyle(s);
-                    setStyleMenuOpen(false);
-                  }}
-                  className="flex w-full items-center justify-between rounded px-2 py-1.5 text-[10px] font-bold text-foreground hover:bg-[#27272a] capitalize transition-all"
-                >
-                  <span>{s}</span>
-                  {style === s && <Check size={10} className="text-[#3b82f6]" />}
-                </button>
-              ))}
-            </div>
-          )}
+            {styleMenuOpen && (
+              <div className="absolute left-0 top-full mt-1.5 w-[130px] bg-[#1c1c1f] border border-border/80 rounded-xl p-1 shadow-2xl z-50 text-left">
+                {(["default", "striped", "clean", "glass"] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => {
+                      handleChangeStyle(s);
+                      setStyleMenuOpen(false);
+                    }}
+                    className="flex w-full items-center justify-between rounded px-2 py-1.5 text-[10px] font-bold text-foreground hover:bg-[#27272a] capitalize transition-all"
+                  >
+                    <span>{s}</span>
+                    {style === s && <Check size={10} className="text-[#3b82f6]" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* RENDER RESIZABLE DYNAMIC TABLE */}
       <div className="w-full overflow-x-auto border border-border/40 rounded-xl bg-transparent">

@@ -40,7 +40,6 @@ import { CreateFolderDialog } from "@/components/workspace/CreateFolderDialog";
 import { InviteFriendsDialog } from "@/components/workspace/InviteFriendsDialog";
 import { SubscriptionModal } from "@/components/workspace/SubscriptionModal";
 import { FlashcardsView } from "@/components/study/FlashcardsView";
-import { QuizView } from "@/components/study/QuizView";
 import { StudyGuideView } from "@/components/study/StudyGuideView";
 import { SolveView } from "@/components/study/SolveView";
 import { WriteView } from "@/components/study/WriteView";
@@ -346,7 +345,7 @@ export default function Dashboard() {
       type: toolId,
       category: forcePrivate ? "private" : (toolId === "chat" ? "private" : "shared"),
       visibility: (forcePrivate || toolId === "chat") ? "me" : "members",
-      isConfigured: toolId !== "quiz" && toolId !== "study-guide",
+      isConfigured: toolId !== "quiz" && toolId !== "study-guide" && toolId !== "flashcards",
       resources: [],
       focusedResourceIds: [],
     };
@@ -378,6 +377,12 @@ export default function Dashboard() {
     );
   };
 
+  const handleRegenerateQuiz = () => {
+    // Just open the wizard overlay without touching isConfigured.
+    // The space stays visible; wizard appears on top.
+    setShowQuizWizard(true);
+  };
+
   const handleConfigStudyGuide = (visibility: VisibilityType, resources: any[]) => {
     setSpaces((prev) =>
       prev.map((s) =>
@@ -395,8 +400,8 @@ export default function Dashboard() {
 
   const views: Record<ToolId, React.ReactNode> = {
     "study-guide": <StudyGuideView onBack={handleBackToHub} />,
-    quiz: <QuizView onBack={handleBackToHub} />,
-    flashcards: <FlashcardsView onBack={handleBackToHub} />,
+    quiz: <QuizEditor spaceName="Quiz" visibility="members" onTakeQuiz={()=>{}} onGenerateQuestions={handleRegenerateQuiz} />,
+    flashcards: <FlashcardsView spaceName="Flashcards" visibility="members" isConfigured={true} onCompleteConfig={()=>{}} onBack={handleBackToHub} />,
     solve: <SolveView onBack={handleBackToHub} />,
     write: <WriteView onBack={handleBackToHub} />,
     recording: <RecordingView onBack={handleBackToHub} />,
@@ -425,6 +430,22 @@ export default function Dashboard() {
             visibility={activeSpace.visibility}
             onTakeQuiz={handleConfigQuiz}
             onGenerateQuestions={handleConfigQuiz}
+            onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
+          />
+        );
+      } else if (activeSpace.type === "flashcards") {
+        mainContent = (
+          <FlashcardsView
+            spaceName={activeSpace.name}
+            visibility={activeSpace.visibility}
+            isConfigured={false}
+            onCompleteConfig={() => {
+              setSpaces((prev) =>
+                prev.map((s) => (s.id === activeSpace.id ? { ...s, isConfigured: true } : s))
+              );
+            }}
+            onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
+            onBack={handleBackToHub}
           />
         );
       } else {
@@ -449,9 +470,26 @@ export default function Dashboard() {
           />
         );
       } else if (activeSpace.type === "quiz") {
-        mainContent = <QuizView onBack={handleBackToHub} />;
+        mainContent = (
+          <QuizEditor
+            spaceName={activeSpace.name}
+            visibility={activeSpace.visibility}
+            onTakeQuiz={() => {}}
+            onGenerateQuestions={handleRegenerateQuiz}
+            onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
+          />
+        );
       } else if (activeSpace.type === "flashcards") {
-        mainContent = <FlashcardsView onBack={handleBackToHub} />;
+        mainContent = (
+          <FlashcardsView
+            spaceName={activeSpace.name}
+            visibility={activeSpace.visibility}
+            isConfigured={true}
+            onCompleteConfig={() => {}}
+            onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
+            onBack={handleBackToHub}
+          />
+        );
       } else if (activeSpace.type === "solve") {
         mainContent = <SolveView onBack={handleBackToHub} />;
       } else if (activeSpace.type === "write") {
@@ -616,10 +654,11 @@ export default function Dashboard() {
           </div>
         ) : null}
 
-        <main className="min-w-0 flex-1 overflow-y-auto">
+        <main className="min-w-0 flex-1 overflow-y-auto h-full">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeSpaceId ? `${activeSpaceId}-${activeSpace?.type}-${activeSpace?.isConfigured}` : (activeTool ?? "hub")}
+              className="h-full"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
@@ -645,7 +684,8 @@ export default function Dashboard() {
         isOpen={showQuizWizard}
         onClose={() => {
           setShowQuizWizard(false);
-          if (activeSpace && !activeSpace.isConfigured) {
+          // Only delete the space if it was brand-new (quizMethod not yet set = never completed wizard)
+          if (activeSpace && !activeSpace.quizMethod) {
             setSpaces((prev) => prev.filter((s) => s.id !== activeSpaceId));
             setActiveSpaceId(null);
           }
