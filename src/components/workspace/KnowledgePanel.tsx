@@ -171,19 +171,19 @@ export function KnowledgePanel({ onClose }: { onClose: () => void }) {
             <div className="flex gap-3 items-start">
               <Crosshair size={16} className="text-muted-foreground shrink-0 mt-0.5" />
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Knowledge allows Atlas to provide specific and accurate answers about the contents of your folder.
+                Knowledge allows Espada to provide specific and accurate answers about the contents of your folder.
               </p>
             </div>
             <div className="flex gap-3 items-start">
               <BookOpen size={16} className="text-muted-foreground shrink-0 mt-0.5" />
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Atlas learns the most from textbooks, lectures, readings, notes, assignments, and tests.
+                Espada learns the most from textbooks, lectures, readings, notes, assignments, and tests.
               </p>
             </div>
             <div className="flex gap-3 items-start">
               <Brain size={16} className="text-muted-foreground shrink-0 mt-0.5" />
               <p className="text-xs leading-relaxed text-muted-foreground">
-                The more knowledge you can add, the better. Every resource added makes Atlas smarter.
+                The more knowledge you can add, the better. Every resource added makes Espada smarter.
               </p>
             </div>
           </div>

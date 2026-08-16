@@ -370,7 +370,7 @@ export function ChatView({
                   handleSendMessage();
                 }
               }}
-              placeholder="Share with Atlas..."
+              placeholder="Share with Espada..."
               className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none resize-none min-h-[60px]"
             />
 

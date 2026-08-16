@@ -404,7 +404,7 @@ export default function Dashboard() {
       type: toolId,
       category: forcePrivate ? "private" : (toolId === "chat" ? "private" : "shared"),
       visibility: (forcePrivate || toolId === "chat") ? "me" : "members",
-      isConfigured: toolId !== "quiz" && toolId !== "study-guide" && toolId !== "flashcards",
+      isConfigured: toolId !== "quiz" && toolId !== "study-guide" && toolId !== "flashcards" && toolId !== "solve",
       resources: [],
       focusedResourceIds: [],
     };
@@ -461,7 +461,7 @@ export default function Dashboard() {
     "study-guide": <StudyGuideView onBack={handleBackToHub} />,
     quiz: <QuizEditor spaceName="Quiz" visibility="members" onTakeQuiz={()=>{}} onGenerateQuestions={handleRegenerateQuiz} />,
     flashcards: <FlashcardsView spaceName="Flashcards" visibility="members" isConfigured={true} onCompleteConfig={()=>{}} onBack={handleBackToHub} />,
-    solve: <SolveView onBack={handleBackToHub} />,
+    solve: <SolveView spaceName="Solve" visibility="members" isConfigured={true} onBack={handleBackToHub} />,
     write: <WriteView onBack={handleBackToHub} />,
     recording: <RecordingView onBack={handleBackToHub} />,
     notes: <NotesView onBack={handleBackToHub} />,
@@ -502,6 +502,22 @@ export default function Dashboard() {
               setSpaces((prev) =>
                 prev.map((s) => (s.id === activeSpace.id ? { ...s, isConfigured: true } : s))
               );
+            }}
+            onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
+            onBack={handleBackToHub}
+          />
+        );
+      } else if (activeSpace.type === "solve") {
+        mainContent = (
+          <SolveView
+            spaceName={activeSpace.name}
+            visibility={activeSpace.visibility}
+            isConfigured={false}
+            onCompleteConfig={(problemName) => {
+              setSpaces((prev) =>
+                prev.map((s) => (s.id === activeSpace.id ? { ...s, name: problemName || s.name, isConfigured: true } : s))
+              );
+              setFolderOpen(false);
             }}
             onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
             onBack={handleBackToHub}
@@ -550,7 +566,15 @@ export default function Dashboard() {
           />
         );
       } else if (activeSpace.type === "solve") {
-        mainContent = <SolveView onBack={handleBackToHub} />;
+        mainContent = (
+          <SolveView
+            spaceName={activeSpace.name}
+            visibility={activeSpace.visibility}
+            isConfigured={true}
+            onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
+            onBack={handleBackToHub}
+          />
+        );
       } else if (activeSpace.type === "write") {
         mainContent = <WriteView onBack={handleBackToHub} />;
       } else if (activeSpace.type === "recording") {

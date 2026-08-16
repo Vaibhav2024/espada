@@ -556,7 +556,7 @@ export function FlashcardsView({
                   <div className="absolute inset-0 bg-[#1c1c1f]/95 z-50 flex flex-col items-center justify-center p-6 text-center">
                     <div className="w-10 h-10 border-4 border-foreground border-t-transparent rounded-full animate-spin mb-4" />
                     <p className="text-sm font-semibold text-foreground">Generating deck...</p>
-                    <p className="text-xs text-muted-foreground mt-1">Atlas is processing your topic and materials</p>
+                    <p className="text-xs text-muted-foreground mt-1">Espada is processing your topic and materials</p>
                   </div>
                 )}
 
@@ -628,7 +628,7 @@ export function FlashcardsView({
                       {resources.length === 0 ? (
                         <div className="text-center">
                           <p className="text-xs font-semibold text-foreground">Nothing selected</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">Atlas will reference the resources you select</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">Espada will reference the resources you select</p>
                         </div>
                       ) : (
                         <div className="w-full space-y-1.5">

@@ -18,7 +18,7 @@ export function MembersPanel({ onClose }: { onClose: () => void }) {
   const [copiedCode, setCopiedCode] = useState(false);
   const [joinPreference, setJoinPreference] = useState<"link" | "web">("link");
 
-  const inviteLink = "www.atlas.org/invite?c=PTGSRA";
+  const inviteLink = "www.espada.org/invite?c=PTGSRA";
   const inviteCode = "PTGSRA";
 
   const handleCopyLink = () => {
@@ -89,13 +89,13 @@ export function MembersPanel({ onClose }: { onClose: () => void }) {
             <div className="flex gap-3 items-start">
               <Crosshair size={16} className="text-muted-foreground shrink-0 mt-0.5" />
               <p className="text-xs leading-relaxed text-muted-foreground">
-                On average, responses from Atlas are <span className="text-foreground font-semibold">2x more powerful</span> in folders with 5 or more members.
+                On average, responses from Espada are <span className="text-foreground font-semibold">2x more powerful</span> in folders with 5 or more members.
               </p>
             </div>
             <div className="flex gap-3 items-start">
               <Brain size={16} className="text-muted-foreground shrink-0 mt-0.5" />
               <p className="text-xs leading-relaxed text-muted-foreground">
-                The more members you add, the smarter Atlas becomes for everyone in your folder.
+                The more members you add, the smarter Espada becomes for everyone in your folder.
               </p>
             </div>
           </div>
