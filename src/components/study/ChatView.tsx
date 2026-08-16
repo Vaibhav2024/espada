@@ -68,6 +68,21 @@ export function ChatView({
       setInputText(initialInputText);
     }
   }, [initialInputText]);
+
+  useEffect(() => {
+    if (messages.length === 1 && messages[0]?.sender === "user") {
+      const timer = setTimeout(() => {
+        const aiMsg: Message = {
+          id: `msg-${Date.now() + 1}`,
+          sender: "ai",
+          text: `I've analyzed your prompt referencing your focused resources. What else can I assist you with in this workspace?`,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [focusOpen, setFocusOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);

@@ -40,6 +40,7 @@ export interface Space {
   quizMethod?: "resources" | "own";
   resources?: { id: string; name: string; loading: boolean }[];
   focusedResourceIds?: string[];
+  initialMessages?: any[];
 }
 
 export function FolderSidebar({

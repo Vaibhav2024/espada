@@ -224,7 +224,22 @@ function Rail({
   );
 }
 
-function Hub({ onOpen }: { onOpen: (id: ToolId) => void }) {
+function Hub({
+  onOpen,
+  onAskEspada,
+}: {
+  onOpen: (id: ToolId | "chat") => void;
+  onAskEspada: (text: string) => void;
+}) {
+  const [inputText, setInputText] = useState("");
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && inputText.trim()) {
+      onAskEspada(inputText.trim());
+      setInputText("");
+    }
+  };
+
   return (
     <div className="mx-auto w-full max-w-3xl px-5 py-10">
       <div className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
@@ -236,7 +251,7 @@ function Hub({ onOpen }: { onOpen: (id: ToolId) => void }) {
       </div>
 
       <div className="rounded-2xl border border-border bg-card/60 p-5 sm:p-7">
-        <button className="mb-2 flex w-full items-center gap-2.5 rounded-xl bg-secondary px-4 py-3.5 text-sm font-semibold text-foreground transition-colors hover:bg-card-hover">
+        <button onClick={() => onOpen("chat")} className="mb-2 flex w-full items-center gap-2.5 rounded-xl bg-secondary px-4 py-3.5 text-sm font-semibold text-foreground transition-colors hover:bg-card-hover">
           <MessageSquare size={16} />
           Chat with AI
         </button>
@@ -266,8 +281,26 @@ function Hub({ onOpen }: { onOpen: (id: ToolId) => void }) {
         ))}
       </div>
 
-      <div className="mt-6 rounded-2xl border border-border bg-card px-5 py-4">
-        <p className="text-sm text-muted-foreground">Ask Espada anything…</p>
+      <div className="mt-6 rounded-2xl border border-border bg-[#1c1c1f] px-5 py-3.5 flex items-center gap-3 shadow-xl">
+        <input
+          type="text"
+          placeholder="Ask Espada anything…"
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="w-full bg-transparent border-0 outline-none text-sm text-foreground placeholder:text-muted-foreground/45"
+        />
+        {inputText.trim() && (
+          <button
+            onClick={() => {
+              onAskEspada(inputText.trim());
+              setInputText("");
+            }}
+            className="p-1.5 rounded-lg bg-foreground text-background hover:opacity-90 transition-opacity cursor-pointer"
+          >
+            <Send size={13} className="fill-current" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -333,6 +366,32 @@ export default function Dashboard() {
   const handleNewPrivateSpace = () => {
     setPendingPrivateSpace(true);
     setShowToolSelector(true);
+    setFolderOpen(true);
+  };
+
+  const handleAskEspada = (text: string) => {
+    const newId = `space-${Date.now()}`;
+    const newSpace: Space = {
+      id: newId,
+      name: text.length > 25 ? text.slice(0, 25) + "..." : text,
+      type: "chat",
+      category: "private",
+      visibility: "me",
+      isConfigured: true,
+      resources: [],
+      focusedResourceIds: [],
+      initialMessages: [
+        {
+          id: `msg-${Date.now()}`,
+          sender: "user",
+          text,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        }
+      ]
+    };
+
+    setSpaces((prev) => [...prev, newSpace]);
+    setActiveSpaceId(newId);
     setFolderOpen(true);
   };
 
@@ -450,7 +509,7 @@ export default function Dashboard() {
         );
       } else {
         // default/chat or other
-        mainContent = <Hub onOpen={handleSelectTool} />;
+        mainContent = <Hub onOpen={handleSelectTool} onAskEspada={handleAskEspada} />;
       }
     } else {
       if (activeSpace.type === "study-guide") {
@@ -504,6 +563,7 @@ export default function Dashboard() {
             spaceName={activeSpace.name}
             resources={activeSpace.resources || []}
             focusedResourceIds={activeSpace.focusedResourceIds || []}
+            initialMessages={activeSpace.initialMessages}
             onAddResource={(res) => {
               setSpaces((prev) =>
                 prev.map((s) =>
@@ -560,7 +620,7 @@ export default function Dashboard() {
         );
       } else {
         // Fallback
-        mainContent = <Hub onOpen={handleSelectTool} />;
+        mainContent = <Hub onOpen={handleSelectTool} onAskEspada={handleAskEspada} />;
       }
     }
   } else {
@@ -569,6 +629,7 @@ export default function Dashboard() {
     ) : (
       <Hub
         onOpen={handleSelectTool}
+        onAskEspada={handleAskEspada}
       />
     );
   }
