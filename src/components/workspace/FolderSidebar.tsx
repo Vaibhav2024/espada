@@ -17,6 +17,7 @@ import {
   Edit2,
   Users,
 } from "lucide-react";
+import * as Lucide from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -41,6 +42,7 @@ export interface Space {
   resources?: { id: string; name: string; loading: boolean }[];
   focusedResourceIds?: string[];
   initialMessages?: any[];
+  folderId?: string;
 }
 
 export function FolderSidebar({
@@ -57,6 +59,9 @@ export function FolderSidebar({
   onSelectSpace,
   onRenameSpace,
   onDeleteSpace,
+  folderName = "My folder",
+  folderIconName = "Folder",
+  folderThemeColor = "#a1a1aa",
 }: {
   collapsed: boolean;
   onToggle: () => void;
@@ -71,7 +76,11 @@ export function FolderSidebar({
   onSelectSpace?: (id: string) => void;
   onRenameSpace?: (id: string, newName: string) => void;
   onDeleteSpace?: (id: string) => void;
+  folderName?: string;
+  folderIconName?: string;
+  folderThemeColor?: string;
 }) {
+  const FolderIcon = (Lucide as any)[folderIconName] || Lucide.Folder;
   // Context Menu State
   const [contextMenu, setContextMenu] = useState<{
     spaceId: string;
@@ -208,8 +217,8 @@ export function FolderSidebar({
         {/* My folder — full-width active pill row */}
         <div className="flex items-center justify-between rounded-xl bg-secondary/70 px-3 py-2">
           <div className="flex items-center gap-2.5 text-sm font-semibold text-foreground">
-            <Folder size={15} className="text-muted-foreground" />
-            My folder
+            <FolderIcon size={15} style={{ color: folderThemeColor }} />
+            {folderName}
           </div>
           <button
             onClick={onToggle}

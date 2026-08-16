@@ -26,6 +26,7 @@ import {
   FileText,
   type LucideIcon,
 } from "lucide-react";
+import * as Lucide from "lucide-react";
 
 import {
   DropdownMenu,
@@ -94,6 +95,9 @@ function Rail({
   onCreateFolder,
   onJoinInvite,
   onPro,
+  folders = [],
+  activeFolderId = "default",
+  onSelectFolder,
 }: {
   folderOpen: boolean;
   onFolder: () => void;
@@ -102,7 +106,18 @@ function Rail({
   onCreateFolder: () => void;
   onJoinInvite: () => void;
   onPro: () => void;
+  folders?: FolderData[];
+  activeFolderId?: string;
+  onSelectFolder: (id: string) => void;
 }) {
+  const isDefaultActive = activeFolderId === "default";
+  const handleDefaultFolderClick = () => {
+    if (isDefaultActive) {
+      onFolder();
+    } else {
+      onSelectFolder("default");
+    }
+  };
   return (
     <aside className="z-20 hidden w-[60px] shrink-0 flex-col items-center justify-between overflow-hidden bg-black py-3.5 md:flex">
       <div className="flex w-full flex-col items-center">
@@ -116,19 +131,40 @@ function Rail({
         <div className="my-3 h-px w-6 bg-border" />
         <div className="relative flex w-full items-center justify-center mt-3">
           <button
-            onClick={onFolder}
+            onClick={handleDefaultFolderClick}
             aria-label="My folder"
             className={`flex size-10 items-center justify-center rounded-[14px] transition-colors hover:bg-card-hover hover:text-foreground ${
-              folderOpen ? "bg-secondary text-foreground" : "bg-secondary/70 text-muted-foreground"
+              isDefaultActive ? "bg-secondary text-foreground" : "bg-secondary/70 text-muted-foreground"
             }`}
           >
             <FolderOpen size={18} />
           </button>
           {/* Active indicator — white pill on right edge */}
-          {folderOpen && (
+          {isDefaultActive && (
             <span className="absolute right-0 top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-full bg-white" />
           )}
         </div>
+
+        {folders.map((folder) => {
+          const FolderIcon = (Lucide as any)[folder.iconName] || Lucide.Folder;
+          const isActive = activeFolderId === folder.id;
+          return (
+            <div key={folder.id} className="relative flex w-full items-center justify-center mt-3 animate-in fade-in zoom-in duration-150">
+              <button
+                onClick={() => onSelectFolder(folder.id)}
+                aria-label={folder.name}
+                className={`flex size-10 items-center justify-center rounded-[14px] transition-colors hover:bg-card-hover hover:text-foreground ${
+                  isActive ? "bg-secondary text-foreground" : "bg-secondary/70 text-muted-foreground"
+                }`}
+              >
+                <FolderIcon size={18} style={{ color: folder.themeColor }} />
+              </button>
+              {isActive && (
+                <span className="absolute right-0 top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-full bg-white" />
+              )}
+            </div>
+          );
+        })}
         
         {/* Dropdown Menu for Add (+) button aligned to the right of the button */}
         <DropdownMenu>
@@ -306,8 +342,43 @@ function Hub({
   );
 }
 
+export interface FolderData {
+  id: string;
+  name: string;
+  themeName: string;
+  themeColor: string;
+  iconName: string;
+  isPublic: boolean;
+}
+
 export default function Dashboard() {
   const router = useRouter();
+  const [folders, setFolders] = useState<FolderData[]>([]);
+  const [activeFolderId, setActiveFolderId] = useState<string>("default");
+
+  const handleCreateFolder = (name: string, themeName: string, themeColor: string, iconName: string, isPublic: boolean) => {
+    const newId = `folder-${Date.now()}`;
+    const newFolder: FolderData = {
+      id: newId,
+      name,
+      themeName,
+      themeColor,
+      iconName,
+      isPublic,
+    };
+    setFolders((prev) => [...prev, newFolder]);
+    setActiveFolderId(newId);
+    setActiveSpaceId(null);
+    setActiveTool(null);
+    setFolderOpen(true);
+  };
+
+  const handleSelectFolder = (id: string) => {
+    setActiveFolderId(id);
+    setActiveSpaceId(null);
+    setActiveTool(null);
+    setFolderOpen(true);
+  };
   const [activeTool, setActiveTool] = useState<ToolId | null>(null);
   const [folderOpen, setFolderOpen] = useState(true); // Default to true to show the spaces sidebar
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -328,6 +399,7 @@ export default function Dashboard() {
       isConfigured: true,
       resources: [],
       focusedResourceIds: [],
+      folderId: "default",
     },
     {
       id: "untitled-space",
@@ -338,6 +410,7 @@ export default function Dashboard() {
       isConfigured: true,
       resources: [],
       focusedResourceIds: [],
+      folderId: "default",
     },
   ]);
   const [activeSpaceId, setActiveSpaceId] = useState<string | null>("college-2026");
@@ -407,6 +480,7 @@ export default function Dashboard() {
       isConfigured: toolId !== "quiz" && toolId !== "study-guide" && toolId !== "flashcards" && toolId !== "solve" && toolId !== "write" && toolId !== "notes",
       resources: [],
       focusedResourceIds: [],
+      folderId: activeFolderId,
     };
 
     setSpaces((prev) => [...prev, newSpace]);
@@ -734,6 +808,11 @@ export default function Dashboard() {
     );
   }
 
+  const filteredSpaces = spaces.filter((s) => (s.folderId || "default") === activeFolderId);
+  const activeFolder = activeFolderId === "default"
+    ? undefined
+    : folders.find((f) => f.id === activeFolderId);
+
   return (
     <div className="flex h-screen overflow-hidden bg-black text-foreground">
       <Rail
@@ -744,6 +823,9 @@ export default function Dashboard() {
         onJoinInvite={() => router.push("/join")}
         onInvite={() => setInviteOpen(true)}
         onPro={() => setSubscriptionOpen(true)}
+        folders={folders}
+        activeFolderId={activeFolderId}
+        onSelectFolder={handleSelectFolder}
       />
 
       {/* Floating rounded window container wrapping all content to the right of the Rail */}
@@ -765,7 +847,10 @@ export default function Dashboard() {
                 setShowMembers(false);
               }}
               isKnowledgeOpen={showKnowledge}
-              spaces={spaces}
+              spaces={filteredSpaces}
+              folderName={activeFolder ? activeFolder.name : "My folder"}
+              folderIconName={activeFolder ? activeFolder.iconName : "Folder"}
+              folderThemeColor={activeFolder ? activeFolder.themeColor : "#a1a1aa"}
               activeSpaceId={activeSpaceId}
               onSelectSpace={(id) => {
                 setActiveSpaceId(id);
@@ -831,7 +916,7 @@ export default function Dashboard() {
         </main>
       </div>
 
-      <CreateFolderDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <CreateFolderDialog open={createOpen} onOpenChange={setCreateOpen} onCreate={handleCreateFolder} />
       <InviteFriendsDialog open={inviteOpen} onOpenChange={setInviteOpen} />
 
       {/* Space setup wizard modals */}
