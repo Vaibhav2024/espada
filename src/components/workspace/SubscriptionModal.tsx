@@ -38,7 +38,7 @@ export function SubscriptionModal({
 
   if (!isOpen) return null;
 
-  const proPrice = billingCycle === "annually" ? 4.99 : 12.99;
+  const proPrice = billingCycle === "annually" ? 4.99 : 6.99;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -79,9 +79,8 @@ export function SubscriptionModal({
             <div className="flex items-center justify-center gap-3.5 mt-5 mb-1">
               <span
                 onClick={() => setBillingCycle("monthly")}
-                className={`text-[11px] font-bold cursor-pointer select-none transition-colors ${
-                  billingCycle === "monthly" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`text-[11px] font-bold cursor-pointer select-none transition-colors ${billingCycle === "monthly" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
               >
                 Billed Monthly
               </span>
@@ -92,9 +91,8 @@ export function SubscriptionModal({
                 className="relative h-5.5 w-10 cursor-pointer rounded-full bg-secondary transition-colors"
               >
                 <div
-                  className={`absolute top-0.5 size-4.5 rounded-full bg-foreground shadow-md transition-transform duration-200 ${
-                    billingCycle === "annually" ? "translate-x-5" : "translate-x-0.5"
-                  }`}
+                  className={`absolute top-0.5 size-4.5 rounded-full bg-foreground shadow-md transition-transform duration-200 ${billingCycle === "annually" ? "translate-x-5" : "translate-x-0.5"
+                    }`}
                 />
               </div>
 
@@ -103,9 +101,8 @@ export function SubscriptionModal({
                 className="flex items-center gap-1.5 cursor-pointer select-none"
               >
                 <span
-                  className={`text-[11px] font-bold transition-colors ${
-                    billingCycle === "annually" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  className={`text-[11px] font-bold transition-colors ${billingCycle === "annually" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                    }`}
                 >
                   Billed Annually
                 </span>
@@ -118,7 +115,7 @@ export function SubscriptionModal({
 
           {/* Cards Grid */}
           <div className="grid md:grid-cols-2 gap-5 mt-5">
-            
+
             {/* Free Plan Card */}
             <div className="rounded-2xl border border-border bg-[#18181b]/35 p-5 flex flex-col justify-between relative overflow-hidden">
               <div>
@@ -176,7 +173,7 @@ export function SubscriptionModal({
                   <span className="text-[11px] text-muted-foreground font-medium">/ month</span>
                 </div>
                 <span className="text-[9px] text-muted-foreground font-semibold block mt-1">
-                  {billingCycle === "annually" ? "$59.88 billed annually ($4.99/mo)" : "Billed monthly ($12.99/mo)"}
+                  {billingCycle === "annually" ? "$59.88 billed annually ($4.99/mo)" : "Billed monthly ($6.99/mo)"}
                 </span>
 
                 {/* Bullet Highlights */}

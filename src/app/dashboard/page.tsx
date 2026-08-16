@@ -44,7 +44,7 @@ import { StudyGuideView } from "@/components/study/StudyGuideView";
 import { SolveView } from "@/components/study/SolveView";
 import { WriteView } from "@/components/study/WriteView";
 import { RecordingView } from "@/components/study/RecordingView";
-import { NotesView } from "@/components/study/NotesView";
+import { NotesView, NotesEditor } from "@/components/study/NotesView";
 import { ToolSelectorModal, QuizWizardModal, type VisibilityType } from "@/components/study/SpaceWizard";
 import { StudyGuideEditor } from "@/components/study/StudyGuideEditor";
 import { QuizEditor } from "@/components/study/QuizEditor";
@@ -404,7 +404,7 @@ export default function Dashboard() {
       type: toolId,
       category: forcePrivate ? "private" : (toolId === "chat" ? "private" : "shared"),
       visibility: (forcePrivate || toolId === "chat") ? "me" : "members",
-      isConfigured: toolId !== "quiz" && toolId !== "study-guide" && toolId !== "flashcards" && toolId !== "solve" && toolId !== "write",
+      isConfigured: toolId !== "quiz" && toolId !== "study-guide" && toolId !== "flashcards" && toolId !== "solve" && toolId !== "write" && toolId !== "notes",
       resources: [],
       focusedResourceIds: [],
     };
@@ -464,7 +464,14 @@ export default function Dashboard() {
     solve: <SolveView spaceName="Solve" visibility="members" isConfigured={true} onBack={handleBackToHub} />,
     write: <WriteView onBack={handleBackToHub} />,
     recording: <RecordingView onBack={handleBackToHub} />,
-    notes: <NotesView onBack={handleBackToHub} />,
+    notes: (
+      <NotesView
+        spaceName="Notes"
+        visibility="public"
+        resources={[]}
+        onBack={handleBackToHub}
+      />
+    ),
   };
 
   const activeSpace = spaces.find((s) => s.id === activeSpaceId);
@@ -537,6 +544,28 @@ export default function Dashboard() {
             }}
             onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
             onBack={handleBackToHub}
+          />
+        );
+      } else if (activeSpace.type === "notes") {
+        mainContent = (
+          <NotesEditor
+            spaceName={activeSpace.name}
+            onGenerate={(visibility, resources, generatedName) => {
+              setSpaces((prev) =>
+                prev.map((s) =>
+                  s.id === activeSpace.id
+                    ? {
+                        ...s,
+                        name: generatedName || s.name,
+                        visibility,
+                        resources,
+                        isConfigured: true,
+                      }
+                    : s
+                )
+              );
+              setFolderOpen(false);
+            }}
           />
         );
       } else {
@@ -613,7 +642,21 @@ export default function Dashboard() {
           />
         );
       } else if (activeSpace.type === "notes") {
-        mainContent = <NotesView onBack={handleBackToHub} />;
+        mainContent = (
+          <NotesView
+            spaceName={activeSpace.name}
+            visibility={activeSpace.visibility || "public"}
+            resources={activeSpace.resources || []}
+            onBack={handleBackToHub}
+            onUpdateVisibility={(vis) => {
+              setSpaces((prev) =>
+                prev.map((s) =>
+                  s.id === activeSpace.id ? { ...s, visibility: vis } : s
+                )
+              );
+            }}
+          />
+        );
       } else if (activeSpace.type === "chat") {
         mainContent = (
           <ChatView
