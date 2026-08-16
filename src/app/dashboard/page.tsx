@@ -400,7 +400,7 @@ export default function Dashboard() {
     const forcePrivate = pendingPrivateSpace;
     const newSpace: Space = {
       id: newId,
-      name: "Untitled space",
+      name: toolId === "recording" ? "New notes" : "Untitled space",
       type: toolId,
       category: forcePrivate ? "private" : (toolId === "chat" ? "private" : "shared"),
       visibility: (forcePrivate || toolId === "chat") ? "me" : "members",
@@ -603,7 +603,15 @@ export default function Dashboard() {
           />
         );
       } else if (activeSpace.type === "recording") {
-        mainContent = <RecordingView onBack={handleBackToHub} />;
+        mainContent = (
+          <RecordingView
+            spaceName={activeSpace.name}
+            visibility={activeSpace.visibility}
+            initialDraft={activeSpace.plainTextContent}
+            onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
+            onBack={handleBackToHub}
+          />
+        );
       } else if (activeSpace.type === "notes") {
         mainContent = <NotesView onBack={handleBackToHub} />;
       } else if (activeSpace.type === "chat") {
