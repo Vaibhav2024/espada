@@ -107,6 +107,7 @@ export function SolveView({
   const chatUploadRef = useRef<HTMLDivElement>(null);
   const chatFocusRef = useRef<HTMLDivElement>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
   // Space/Solve resources state
   const [spaceResources, setSpaceResources] = useState<Resource[]>([
@@ -776,7 +777,10 @@ export function SolveView({
               {/* Ask follow up button */}
               <button
                 onClick={() => {
-                  setChatInput("Can you explain the steps in more detail?");
+                  setChatCollapsed(false);
+                  setTimeout(() => {
+                    chatInputRef.current?.focus();
+                  }, 50);
                 }}
                 className="w-full mt-6 rounded-xl border border-border bg-[#27272a]/60 hover:bg-[#27272a] px-4 py-3 text-xs font-semibold text-foreground transition-all shadow-md text-center cursor-pointer"
               >
@@ -871,6 +875,7 @@ export function SolveView({
 
             <div className="relative rounded-xl border border-border bg-[#18181b] p-2 flex flex-col gap-2">
               <textarea
+                ref={chatInputRef}
                 rows={2}
                 placeholder="Share with Espada..."
                 value={chatInput}
