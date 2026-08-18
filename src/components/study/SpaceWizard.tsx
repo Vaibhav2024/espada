@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { generateQuiz, fetchKnowledgeItems, addSpaceResource } from "@/lib/api";
 import {
   BookOpen,
   Layers,
@@ -154,10 +155,14 @@ export function QuizWizardModal({
   isOpen,
   onClose,
   onComplete,
+  folderId,
+  spaceId,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onComplete: (method: "resources" | "own", visibility: VisibilityType) => void;
+  onComplete: (method: "resources" | "own", visibility: VisibilityType, questions?: any[]) => void;
+  folderId?: string;
+  spaceId?: string;
 }) {
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [method, setMethod] = useState<"resources" | "own">("resources");
@@ -185,6 +190,8 @@ export function QuizWizardModal({
   const [showTypeSelector, setShowTypeSelector] = useState(false);
   const [language, setLanguage] = useState("English");
   const [hardMode, setHardMode] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState("");
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
@@ -208,6 +215,22 @@ export function QuizWizardModal({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Reset wizard state when reopened
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentStep(0);
+      setMethod("resources");
+      setResources([]);
+      setTopics("");
+      setMaxQuestions("20");
+      setQuestionTypes(["Multiple choice", "True or false", "Short response", "Fill in the blank"]);
+      setLanguage("English");
+      setHardMode(false);
+      setGenerating(false);
+      setGenError("");
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const visibilityLabels: Record<VisibilityType, string> = {
@@ -222,18 +245,20 @@ export function QuizWizardModal({
     return "Private";
   };
 
-  // Simulates adding a resource with a 3-second loader
-  const addResourceItem = (name: string) => {
+  // Adds a resource to the list
+  const addResourceItem = (name: string, alreadyEmbedded = false) => {
     const newId = `res-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
-    const newRes: Resource = { id: newId, name, loading: true };
+    const newRes: Resource = { id: newId, name, loading: !alreadyEmbedded };
     setResources((prev) => [...prev, newRes]);
-    
-    // 3 second loading simulation
-    setTimeout(() => {
-      setResources((prev) =>
-        prev.map((r) => (r.id === newId ? { ...r, loading: false } : r))
-      );
-    }, 3000);
+
+    if (!alreadyEmbedded) {
+      // Real upload would poll status here — for now use timeout as placeholder
+      setTimeout(() => {
+        setResources((prev) =>
+          prev.map((r) => (r.id === newId ? { ...r, loading: false } : r))
+        );
+      }, 3000);
+    }
   };
 
   const handleAddLink = () => {
@@ -264,11 +289,27 @@ export function QuizWizardModal({
     setAddMenuOpen(false);
   };
 
-  const handleSelectMultipleKnowledge = (fileNames: string[]) => {
+  const handleSelectMultipleKnowledge = async (fileNames: string[]) => {
+    // Mark as ready immediately — these are already embedded
     fileNames.forEach((fileName) => {
-      addResourceItem(fileName);
+      addResourceItem(fileName, true);
     });
     setAddMenuOpen(false);
+
+    // Link existing knowledge assets to this space (no re-embedding)
+    if (spaceId && folderId) {
+      try {
+        const items = await fetchKnowledgeItems(folderId);
+        for (const fileName of fileNames) {
+          const match = items.find((item) => item.asset.name === fileName);
+          if (match) {
+            await addSpaceResource(spaceId, match.assetId);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to link knowledge resources:", err);
+      }
+    }
   };
 
   const toggleQuestionType = (type: string) => {
@@ -868,6 +909,11 @@ export function QuizWizardModal({
               </div>
             </div>
 
+            {/* Error message */}
+            {genError && (
+              <p className="mt-4 text-xs text-destructive font-semibold">{genError}</p>
+            )}
+
             {/* Footer row */}
             <div className="mt-8 flex justify-between items-center border-t border-border/40 pt-4">
               <button
@@ -877,10 +923,41 @@ export function QuizWizardModal({
                 Back
               </button>
               <button
-                onClick={() => onComplete(method, visibility)}
-                className="rounded-xl bg-foreground px-6 py-2.5 text-xs font-semibold text-background hover:opacity-90 cursor-pointer transition-opacity"
+                onClick={async () => {
+                  setGenerating(true);
+                  try {
+                    const questions = await generateQuiz({
+                      spaceId: spaceId || "",
+                      folderId,
+                      count: Math.min(Number(maxQuestions) || 10, 30),
+                      types: questionTypes,
+                      language,
+                      hardMode,
+                      topics: topics || undefined,
+                    });
+                    setGenerating(false);
+                    if (questions && questions.length > 0) {
+                      onComplete(method, visibility, questions);
+                    } else {
+                      setGenError("No questions were generated. Try different settings or add more resources.");
+                    }
+                  } catch (err) {
+                    console.error("Quiz generation failed:", err);
+                    setGenerating(false);
+                    setGenError("Failed to generate quiz. Please try again.");
+                  }
+                }}
+                disabled={generating}
+                className="rounded-xl bg-foreground px-6 py-2.5 text-xs font-semibold text-background hover:opacity-90 cursor-pointer transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Generate
+                {generating ? (
+                  <span className="flex items-center gap-2">
+                    <span className="size-3.5 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                    Generating...
+                  </span>
+                ) : (
+                  "Generate"
+                )}
               </button>
             </div>
           </div>
@@ -889,6 +966,7 @@ export function QuizWizardModal({
       <KnowledgeSelectorModal
         isOpen={knowledgeSelectorOpen}
         onClose={() => setKnowledgeSelectorOpen(false)}
+        folderId={folderId}
         onSelectMultiple={handleSelectMultipleKnowledge}
       />
     </div>

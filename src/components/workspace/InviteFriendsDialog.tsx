@@ -21,10 +21,13 @@ function CopyRow({ value }: { value: string }) {
 export function InviteFriendsDialog({
   open,
   onOpenChange,
+  inviteCode,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  inviteCode?: string;
 }) {
+  const code = inviteCode || CODE;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[500px] gap-0 rounded-3xl border-border bg-popover p-8">
@@ -38,10 +41,10 @@ export function InviteFriendsDialog({
         </p>
 
         <p className="mt-6 text-sm font-semibold text-foreground">Invite with link</p>
-        <CopyRow value={`www.espada.ai/invite?u=${CODE}`} />
+        <CopyRow value={`www.espada.ai/invite?u=${code}`} />
 
         <p className="mt-6 text-sm font-semibold text-foreground">Invite code</p>
-        <CopyRow value={CODE} />
+        <CopyRow value={code} />
 
         <div className="mt-8 flex items-center justify-between">
           <p className="text-sm font-semibold text-foreground">

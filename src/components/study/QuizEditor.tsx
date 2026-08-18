@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { fetchQuizQuestions, evaluateQuizAnswer } from "@/lib/api";
 import {
   Folder, ChevronRight, ChevronDown, ListChecks, Globe, User, Users,
   Plus, Play, Sparkles, Eye, EyeOff, Pencil, Trash2, X, Check, GripVertical, HelpCircle,
@@ -390,6 +391,7 @@ function QuizPlayer({ questions, spaceName, onExit, onSubmit }: {
   // For multi-select MCQ, short-answer, and fill-in-blank, show explanation after Next is clicked
   const [showExplanation, setShowExplanation] = useState<Record<string,boolean>>({});
   const [jumpOpen, setJumpOpen] = useState(false);
+  const [saEvaluation, setSaEvaluation] = useState<Record<string, { correct: boolean; explanation: string; score?: number; improvement?: string; loading: boolean }>>({});
 
   const q = questions[cur]!;
   const isLast = cur === questions.length - 1;
@@ -434,7 +436,10 @@ function QuizPlayer({ questions, spaceName, onExit, onSubmit }: {
         const a=mc[qq.id]??[]; const e=qq.correctOptions??[];
         if(a.length===e.length && e.every(x=>a.includes(x))) c++;
       } else if (qq.type==="true-false") {
-        if((qq.correctOptions??[])[0]===(tf[qq.id]??-1)) c++;
+        const tfOpts = (qq.correctOptions && qq.correctOptions.length > 0)
+          ? qq.correctOptions
+          : qq.answer?.toLowerCase() === "true" ? [0] : qq.answer?.toLowerCase() === "false" ? [1] : [];
+        if(tfOpts[0]===(tf[qq.id]??-1)) c++;
       } else if (qq.type==="short-answer") {
         if((sa[qq.id]??"").trim().length>0) c++;
       } else {
@@ -448,6 +453,35 @@ function QuizPlayer({ questions, spaceName, onExit, onSubmit }: {
     // If it requires showing the explanation panel/screen first before moving on:
     if ((isMultiSelect || q.type === "short-answer" || q.type === "fill-in-blank") && hasAnswered && !revealed) {
       setShowExplanation(p => ({...p, [q.id]: true}));
+
+      // Trigger LLM evaluation for short-answer questions
+      if (q.type === "short-answer" && sa[q.id] && !saEvaluation[q.id]) {
+        setSaEvaluation(p => ({...p, [q.id]: { correct: false, explanation: "", loading: true }}));
+        evaluateQuizAnswer({
+          question: q.question,
+          userAnswer: sa[q.id],
+          correctAnswer: q.exampleAnswer || q.answer,
+        }).then(result => {
+          setSaEvaluation(p => ({...p, [q.id]: { ...result, loading: false }}));
+        }).catch(() => {
+          setSaEvaluation(p => ({...p, [q.id]: { correct: false, explanation: "Unable to evaluate. Compare your answer with the explanation above.", loading: false }}));
+        });
+      }
+
+      // Trigger LLM evaluation for fill-in-blank questions
+      if (q.type === "fill-in-blank" && fib[q.id] && !saEvaluation[q.id]) {
+        setSaEvaluation(p => ({...p, [q.id]: { correct: false, explanation: "", loading: true }}));
+        evaluateQuizAnswer({
+          question: q.question,
+          userAnswer: fib[q.id],
+          correctAnswer: q.answer || "",
+        }).then(result => {
+          setSaEvaluation(p => ({...p, [q.id]: { ...result, loading: false }}));
+        }).catch(() => {
+          setSaEvaluation(p => ({...p, [q.id]: { correct: false, explanation: "Unable to evaluate.", loading: false }}));
+        });
+      }
+
       return;
     }
     // Proceed or submit
@@ -533,7 +567,12 @@ function QuizPlayer({ questions, spaceName, onExit, onSubmit }: {
                           <div>
                             <span className="font-bold text-foreground block mb-1">Correct Answer:</span>
                             {(q.correctOptions??[]).map(idx => (q.options??[])[idx]).join(", ")}
+                            {q.exampleAnswer && (
+                              <p className="mt-2 text-foreground/70">{q.exampleAnswer}</p>
+                            )}
                           </div>
+                        ) : q.exampleAnswer ? (
+                          <div>{q.exampleAnswer}</div>
                         ) : (
                           "No explanation available."
                         )}
@@ -548,7 +587,11 @@ function QuizPlayer({ questions, spaceName, onExit, onSubmit }: {
                 <div className="space-y-2.5">
                   {["True","False"].map((lbl,i) => {
                     const sel = tf[q.id] === i;
-                    const correct = (q.correctOptions??[]).includes(i);
+                    // Derive correctOptions from answer field if not set
+                    const tfCorrectOptions = (q.correctOptions && q.correctOptions.length > 0)
+                      ? q.correctOptions
+                      : q.answer?.toLowerCase() === "true" ? [0] : q.answer?.toLowerCase() === "false" ? [1] : [];
+                    const correct = tfCorrectOptions.includes(i);
                     const isGreen = revealed && correct;
                     const isRed   = revealed && sel && !correct;
                     const isActive = !revealed && sel;
@@ -581,14 +624,27 @@ function QuizPlayer({ questions, spaceName, onExit, onSubmit }: {
                     <div className="pt-4">
                       <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Explanation</p>
                       <div className="rounded-xl border border-[#2a2a2d] bg-[#1a1a1d] px-4 py-4 text-sm text-foreground/80 leading-relaxed">
-                        {(q.correctOptions??[]).length > 0 ? (
-                          <div>
-                            <span className="font-bold text-foreground block mb-1">Correct Answer:</span>
-                            {(q.correctOptions??[]).map(idx => (["True", "False"])[idx]).join(", ")}
-                          </div>
-                        ) : (
-                          "No explanation available."
-                        )}
+                        {(() => {
+                          const tfOpts = (q.correctOptions && q.correctOptions.length > 0)
+                            ? q.correctOptions
+                            : q.answer?.toLowerCase() === "true" ? [0] : q.answer?.toLowerCase() === "false" ? [1] : [];
+                          const correctLabel = tfOpts.includes(0) ? "True" : "False";
+                          // Filter out useless explanations that are just "true"/"false"
+                          const hasRealExplanation = q.exampleAnswer
+                            && q.exampleAnswer.toLowerCase() !== "true"
+                            && q.exampleAnswer.toLowerCase() !== "false"
+                            && q.exampleAnswer.length > 15;
+                          return (
+                            <div>
+                              <span className="font-bold text-foreground block mb-1">Correct Answer: {correctLabel}</span>
+                              {hasRealExplanation ? (
+                                <p className="mt-2 text-foreground/70">{q.exampleAnswer}</p>
+                              ) : (
+                                <p className="mt-2 text-foreground/50 italic">Regenerate this quiz to get detailed explanations.</p>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   )}
@@ -634,11 +690,18 @@ function QuizPlayer({ questions, spaceName, onExit, onSubmit }: {
                 <>
                   <input readOnly value={fib[q.id]??""}
                     className="w-full rounded-xl bg-[#1c1c1f] border border-[#2a2a2d] px-4 py-3 text-sm text-foreground outline-none"/>
-                  <div className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${fibCorrect?"bg-emerald-500/15 text-emerald-400":"bg-red-500/15 text-red-400"}`}>
-                    {fibCorrect
-                      ? <><Check size={15}/> That&#39;s correct!</>
-                      : <><X size={15}/> Oops, that&#39;s not correct.</>}
-                  </div>
+                  {saEvaluation[q.id]?.loading ? (
+                    <div className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold bg-secondary/30 text-muted-foreground">
+                      <span className="size-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                      Checking your answer...
+                    </div>
+                  ) : saEvaluation[q.id] ? (
+                    <div className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${saEvaluation[q.id].correct?"bg-emerald-500/15 text-emerald-400":"bg-red-500/15 text-red-400"}`}>
+                      {saEvaluation[q.id].correct
+                        ? <><Check size={15}/> That&#39;s correct!</>
+                        : <><X size={15}/> Oops, that&#39;s not correct.</>}
+                    </div>
+                  ) : null}
                 </>
               )}
               {q.type==="short-answer" && (
@@ -652,18 +715,77 @@ function QuizPlayer({ questions, spaceName, onExit, onSubmit }: {
                 <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mb-5">Explanation</p>
                 <h3 className="text-base font-bold text-foreground mb-2">Correct Answer</h3>
                 <p className="text-sm text-foreground/75 leading-relaxed mb-6">
-                  {q.type==="fill-in-blank"
-                    ? `"${q.answer}" is the correct answer because it completes the sentence accurately.`
-                    : q.exampleAnswer ?? "See the correct answer above."}
+                  {q.exampleAnswer
+                    ? q.exampleAnswer
+                    : q.type === "fill-in-blank"
+                    ? `The correct answer is "${q.answer}".`
+                    : "See the correct answer above."}
                 </p>
-                {((q.type==="fill-in-blank" && !fibCorrect) || q.type==="short-answer") && (
+                {q.type === "short-answer" && (
                   <>
-                    <h3 className="text-base font-bold text-foreground mb-2">Your Answer</h3>
-                    <p className="text-sm text-foreground/60 leading-relaxed">
-                      {q.type==="fill-in-blank"
-                        ? `"${fib[q.id]??""}" is not the correct answer for this question.`
-                        : `"${sa[q.id]??""}" — compare with the example answer above.`}
-                    </p>
+                    <h3 className="text-base font-bold text-foreground mb-2">Your Answer Evaluation</h3>
+                    {saEvaluation[q.id]?.loading ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span className="size-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                        Evaluating your answer...
+                      </div>
+                    ) : saEvaluation[q.id] ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <span className={`text-2xl font-bold ${
+                            (saEvaluation[q.id].score ?? 0) >= 7 ? "text-emerald-400" :
+                            (saEvaluation[q.id].score ?? 0) >= 5 ? "text-yellow-400" : "text-red-400"
+                          }`}>
+                            {saEvaluation[q.id].score}/10
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {(saEvaluation[q.id].score ?? 0) >= 9 ? "Excellent!" :
+                             (saEvaluation[q.id].score ?? 0) >= 7 ? "Good answer" :
+                             (saEvaluation[q.id].score ?? 0) >= 5 ? "Partial credit" : "Needs improvement"}
+                          </span>
+                        </div>
+                        <p className="text-sm text-foreground/75 leading-relaxed">{saEvaluation[q.id].explanation}</p>
+                        {saEvaluation[q.id].improvement && (
+                          <div className="rounded-lg border border-border/50 bg-[#1c1c1f] px-3 py-2.5">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">How to improve</p>
+                            <p className="text-sm text-foreground/70 leading-relaxed">{saEvaluation[q.id].improvement}</p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-foreground/60 leading-relaxed">
+                        "{sa[q.id] ?? ""}" — compare with the explanation above.
+                      </p>
+                    )}
+                  </>
+                )}
+                {q.type === "fill-in-blank" && (
+                  <>
+                    <h3 className="text-base font-bold text-foreground mb-2">Your Answer Evaluation</h3>
+                    {saEvaluation[q.id]?.loading ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span className="size-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                        Evaluating your answer...
+                      </div>
+                    ) : saEvaluation[q.id] ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <span className={`text-lg font-bold ${saEvaluation[q.id].correct ? "text-emerald-400" : "text-red-400"}`}>
+                            {saEvaluation[q.id].correct ? "✓ Correct" : "✗ Incorrect"}
+                          </span>
+                        </div>
+                        <p className="text-sm text-foreground/75 leading-relaxed">{saEvaluation[q.id].explanation}</p>
+                        {!saEvaluation[q.id].correct && (
+                          <p className="text-sm text-muted-foreground">
+                            The expected answer is: <span className="text-foreground font-medium">"{q.answer}"</span>
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-foreground/60 leading-relaxed">
+                        "{fib[q.id] ?? ""}" — The correct answer is "{q.answer}".
+                      </p>
+                    )}
                   </>
                 )}
               </div>
@@ -857,7 +979,10 @@ function ResultsModal({ results, questions, onClose }: {
                 <div className="space-y-2">
                   {["True","False"].map((lbl, i) => {
                     const sel = answers.tf[q.id] === i;
-                    const correct = (q.correctOptions??[]).includes(i);
+                    const tfOpts = (q.correctOptions && q.correctOptions.length > 0)
+                      ? q.correctOptions
+                      : q.answer?.toLowerCase() === "true" ? [0] : q.answer?.toLowerCase() === "false" ? [1] : [];
+                    const correct = tfOpts.includes(i);
                     const isGreen = correct;
                     const isRed = sel && !correct;
                     return (
@@ -921,7 +1046,18 @@ function ResultsModal({ results, questions, onClose }: {
             <div className="pt-2">
               <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Explanation</p>
               <div className="rounded-xl border border-[#2a2a2d] bg-[#1a1a1d] px-4 py-4 text-sm text-foreground/80 leading-relaxed">
-                {q.type === "multiple-choice" || q.type === "true-false" ? (
+                {q.exampleAnswer ? (
+                  <div>
+                    {(q.type === "multiple-choice" || q.type === "true-false") && (q.correctOptions??[]).length > 0 && (
+                      <span className="font-bold text-foreground block mb-1">Correct Answer: {
+                        q.type === "true-false"
+                          ? (q.correctOptions??[]).map(idx => (["True", "False"])[idx]).join(", ")
+                          : (q.correctOptions??[]).map(idx => (q.options??[])[idx]).join(", ")
+                      }</span>
+                    )}
+                    <p className="text-foreground/70">{q.exampleAnswer}</p>
+                  </div>
+                ) : (q.type === "multiple-choice" || q.type === "true-false") ? (
                   (q.correctOptions??[]).length > 0 ? (
                     <div>
                       <span className="font-bold text-foreground block mb-1">Correct Answer:</span>
@@ -933,7 +1069,7 @@ function ResultsModal({ results, questions, onClose }: {
                     "No explanation available."
                   )
                 ) : q.type === "fill-in-blank" ? (
-                  `"${q.answer}" is the correct answer because it completes the sentence accurately.`
+                  `"${q.answer}" is the correct answer.`
                 ) : (
                   q.exampleAnswer ?? "See the correct answer above."
                 )}
@@ -949,16 +1085,16 @@ function ResultsModal({ results, questions, onClose }: {
 
 // ── Main export ──────────────────────────────────────────────────────────────
 export function QuizEditor({
-  spaceName, visibility: initialVisibility, initialQuestions, onTakeQuiz, onGenerateQuestions, onUpdateVisibility,
+  spaceName, spaceId, visibility: initialVisibility, initialQuestions, onTakeQuiz, onGenerateQuestions, onUpdateVisibility,
 }: {
-  spaceName: string; visibility: VisibilityType;
+  spaceName: string; spaceId?: string; visibility: VisibilityType;
   initialQuestions?: QuizQuestion[];
   onTakeQuiz: () => void; onGenerateQuestions: () => void;
   onUpdateVisibility?: (vis: VisibilityType) => void;
 }) {
   const [visibility, setVisibility] = useState<VisibilityType>(initialVisibility);
   const [visOpen, setVisOpen] = useState(false);
-  const [questions, setQuestions] = useState<QuizQuestion[]>(initialQuestions ?? makeDemoQuestions(spaceName));
+  const [questions, setQuestions] = useState<QuizQuestion[]>(initialQuestions ?? []);
   const [editQ, setEditQ] = useState<QuizQuestion | null>(null);
   const [showEdit, setShowEdit] = useState(false);
   const [showTake, setShowTake] = useState(false);
@@ -976,6 +1112,28 @@ export function QuizEditor({
 
   const openEdit = (q: QuizQuestion) => { setEditQ(q); setShowEdit(true); };
   const openAdd  = () => { setEditQ(null); setShowEdit(true); };
+
+  // Load quiz questions from API when spaceId is available
+  useEffect(() => {
+    if (spaceId && (!initialQuestions || initialQuestions.length === 0)) {
+      fetchQuizQuestions(spaceId)
+        .then((result) => {
+          const mapped: QuizQuestion[] = result.map((q) => ({
+            id: q.id,
+            type: q.type,
+            question: q.question,
+            options: q.options ?? undefined,
+            correctOptions: q.correctOptions ?? undefined,
+            exampleAnswer: q.exampleAnswer ?? undefined,
+            matchMode: q.matchMode ?? undefined,
+            answer: q.answer ?? undefined,
+          }));
+          if (mapped.length > 0) setQuestions(mapped);
+        })
+        .catch(() => {});
+    }
+  }, [spaceId]);
+
   const saveQ = (q: QuizQuestion) => setQuestions(prev => {
     const i = prev.findIndex(p=>p.id===q.id);
     if(i>=0){const n=[...prev];n[i]=q;return n;} return [...prev,q];

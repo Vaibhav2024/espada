@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { uploadKnowledge, addKnowledgeLink } from "@/lib/api";
 import {
   FolderOpen,
   ChevronsLeft,
@@ -12,6 +13,9 @@ import {
   Plus,
   FileText,
   X,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 
 export interface KnowledgeItem {
@@ -19,16 +23,24 @@ export interface KnowledgeItem {
   name: string;
   type: "link" | "file";
   folderId: string;
+  status?: "queued" | "processing" | "ready" | "failed";
+  assetId?: string;
 }
 
 export function KnowledgePanel({
   onClose,
   items = [],
   onAddItem,
+  folderId,
+  onUpdateItemStatus,
+  onRefresh,
 }: {
   onClose: () => void;
   items?: KnowledgeItem[];
-  onAddItem?: (name: string, type: "link" | "file") => void;
+  onAddItem?: (name: string, type: "link" | "file", assetId?: string, status?: string) => void;
+  folderId?: string;
+  onUpdateItemStatus?: (id: string, status: "queued" | "processing" | "ready" | "failed") => void;
+  onRefresh?: () => void;
 }) {
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkValue, setLinkValue] = useState("");
@@ -42,30 +54,71 @@ export function KnowledgePanel({
   const addKnowledgeButtonRef = useRef<HTMLButtonElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleAddLink = (e: React.FormEvent) => {
+  const handleAddLink = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (linkValue.trim()) {
-      onAddItem?.(linkValue.trim(), "link");
-      setLinkValue("");
-      setShowLinkInput(false);
+    if (!linkValue.trim()) return;
+
+    const url = linkValue.trim();
+    onAddItem?.(url, "link", undefined, "queued");
+    setLinkValue("");
+    setShowLinkInput(false);
+
+    if (folderId) {
+      try {
+        await addKnowledgeLink(folderId, url);
+        onRefresh?.();
+      } catch (err) {
+        console.error("Failed to add link:", err);
+      }
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      Array.from(e.target.files).forEach((file) => {
-        onAddItem?.(file.name, "file");
-      });
-      // Reset input value so same file can be uploaded again
-      e.target.value = "";
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+
+    for (const file of Array.from(e.target.files)) {
+      if (folderId) {
+        // Add optimistic item
+        onAddItem?.(file.name, "file", undefined, "queued");
+
+        try {
+          const result = await uploadKnowledge(folderId, file);
+
+          // Replace the optimistic item with the real one (by refreshing the list)
+          // The parent's useEffect on activeFolderId won't re-run, so call onRefresh
+          onRefresh?.();
+
+          // Poll for embedding completion
+          const poll = async () => {
+            for (let i = 0; i < 30; i++) {
+              await new Promise((r) => setTimeout(r, 2000));
+              try {
+                const res = await fetch(`/api/assets/${result.asset.id}/status`);
+                if (res.ok) {
+                  const { status } = await res.json();
+                  if (status === "ready" || status === "failed") {
+                    onRefresh?.();
+                    return;
+                  }
+                }
+              } catch {}
+            }
+          };
+          poll();
+        } catch (err) {
+          console.error("Upload failed:", err);
+        }
+      } else {
+        onAddItem?.(file.name, "file", undefined, "queued");
+      }
     }
+    e.target.value = "";
   };
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
 
-      // Close header menu if clicked outside
       if (
         headerMenuOpen &&
         headerMenuRef.current &&
@@ -76,7 +129,6 @@ export function KnowledgePanel({
         setHeaderMenuOpen(false);
       }
 
-      // Close center menu if clicked outside
       if (
         centerMenuOpen &&
         centerMenuRef.current &&
@@ -87,7 +139,6 @@ export function KnowledgePanel({
         setCenterMenuOpen(false);
       }
 
-      // Close link input popover if clicked outside input box/form
       if (
         showLinkInput &&
         linkInputRef.current &&
@@ -100,6 +151,35 @@ export function KnowledgePanel({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [headerMenuOpen, centerMenuOpen, showLinkInput]);
+
+  const getStatusIcon = (status?: string) => {
+    switch (status) {
+      case "queued":
+      case "processing":
+        return <Loader2 size={12} className="text-blue-400 animate-spin shrink-0" />;
+      case "ready":
+        return <CheckCircle2 size={12} className="text-green-400 shrink-0" />;
+      case "failed":
+        return <AlertCircle size={12} className="text-red-400 shrink-0" />;
+      default:
+        return null;
+    }
+  };
+
+  const getStatusLabel = (status?: string) => {
+    switch (status) {
+      case "queued":
+        return "Queued";
+      case "processing":
+        return "Embedding...";
+      case "ready":
+        return "Ready";
+      case "failed":
+        return "Failed";
+      default:
+        return "";
+    }
+  };
 
   return (
     <div className="relative flex h-full w-[350px] flex-col border-r border-border bg-[#0d0d0e] select-none">
@@ -118,7 +198,6 @@ export function KnowledgePanel({
           <span className="text-xs font-semibold text-muted-foreground">{items.length}</span>
         </div>
 
-        {/* Header Action Buttons */}
         <div className="flex items-center gap-3 shrink-0 relative">
           <div className="relative">
             <button
@@ -130,7 +209,6 @@ export function KnowledgePanel({
               <Plus size={16} />
             </button>
 
-            {/* Custom Header Dropdown Menu */}
             {headerMenuOpen && (
               <div
                 ref={headerMenuRef}
@@ -163,7 +241,6 @@ export function KnowledgePanel({
             )}
           </div>
 
-          {/* Paste Link Popover overlay aligned below the Plus Button */}
           {showLinkInput && (
             <form
               ref={linkInputRef}
@@ -197,7 +274,7 @@ export function KnowledgePanel({
         </div>
       </div>
 
-      {/* Main Content (Empty or List) */}
+      {/* Main Content */}
       {items.length === 0 ? (
         <div className="flex-1 overflow-y-auto px-6 py-5">
           <div className="mt-12 flex flex-col items-center text-center">
@@ -227,7 +304,6 @@ export function KnowledgePanel({
               </div>
             </div>
 
-            {/* Center Add Knowledge CTA Button */}
             <div className="relative mt-8">
               <button
                 ref={addKnowledgeButtonRef}
@@ -237,7 +313,6 @@ export function KnowledgePanel({
                 Add knowledge
               </button>
 
-              {/* Custom Center Dropdown Menu */}
               {centerMenuOpen && (
                 <div
                   ref={centerMenuRef}
@@ -282,17 +357,24 @@ export function KnowledgePanel({
                 {item.type === "link" ? (
                   <Link2 size={14} className="text-muted-foreground shrink-0" />
                 ) : (
-                  FileText ? (
-                    <FileText size={14} className="text-muted-foreground shrink-0" />
-                  ) : (
-                    <FolderOpen size={14} className="text-muted-foreground shrink-0" />
-                  )
+                  <FileText size={14} className="text-muted-foreground shrink-0" />
                 )}
                 <span className="truncate pr-2">{item.name}</span>
               </div>
-              <span className="text-[9px] font-semibold text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded capitalize shrink-0">
-                {item.type}
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                {getStatusIcon(item.status)}
+                <span className={`text-[9px] font-semibold px-2 py-0.5 rounded capitalize ${
+                  item.status === "processing" || item.status === "queued"
+                    ? "text-blue-400 bg-blue-400/10"
+                    : item.status === "ready"
+                    ? "text-green-400 bg-green-400/10"
+                    : item.status === "failed"
+                    ? "text-red-400 bg-red-400/10"
+                    : "text-muted-foreground bg-secondary/80"
+                }`}>
+                  {getStatusLabel(item.status) || item.type}
+                </span>
+              </div>
             </div>
           ))}
         </div>

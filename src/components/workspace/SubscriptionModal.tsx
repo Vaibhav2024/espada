@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { X, Check } from "lucide-react";
 import { motion } from "framer-motion";
+import { createSubscription } from "@/lib/api";
+import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 
 interface FeatureRow {
   category: string;
@@ -35,6 +37,27 @@ export function SubscriptionModal({
   onClose: () => void;
 }) {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annually">("annually");
+  const [upgrading, setUpgrading] = useState(false);
+
+  const handleUpgrade = async () => {
+    setUpgrading(true);
+    try {
+      const { subscriptionId, keyId } = await createSubscription({ billingCycle });
+      await openRazorpayCheckout({
+        keyId,
+        subscriptionId,
+        name: "Espada Pro",
+        description: billingCycle === "monthly" ? "$6.99/mo" : "$4.99/mo billed annually",
+      });
+      onClose();
+    } catch (err) {
+      if ((err as Error).message !== "Payment cancelled by user") {
+        console.error("Upgrade failed:", err);
+      }
+    } finally {
+      setUpgrading(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -202,9 +225,11 @@ export function SubscriptionModal({
               </div>
 
               <button
-                className="w-full mt-6 rounded-xl bg-foreground hover:opacity-90 py-2.5 text-xs font-bold text-background cursor-pointer text-center transition-all shadow-md shadow-foreground/5 hover:scale-[1.01]"
+                onClick={handleUpgrade}
+                disabled={upgrading}
+                className="w-full mt-6 rounded-xl bg-foreground hover:opacity-90 py-2.5 text-xs font-bold text-background cursor-pointer text-center transition-all shadow-md shadow-foreground/5 hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Upgrade to Pro
+                {upgrading ? "Processing..." : "Upgrade to Pro"}
               </button>
             </div>
 

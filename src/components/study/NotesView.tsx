@@ -113,9 +113,11 @@ const DEFAULT_NOTES_LINES: DocLine[] = [
 // ==========================================
 export function NotesEditor({
   spaceName,
+  folderId,
   onGenerate,
 }: {
   spaceName: string;
+  folderId?: string;
   onGenerate: (visibility: VisibilityType, resources: Resource[], generatedName: string) => void;
 }) {
   const [resources, setResources] = useState<Resource[]>([]);
@@ -492,6 +494,7 @@ export function NotesEditor({
       <KnowledgeSelectorModal
         isOpen={knowledgeOpen}
         onClose={() => setKnowledgeOpen(false)}
+        folderId={folderId}
         onSelectMultiple={handleSelectMultipleKnowledge}
       />
     </div>
@@ -526,47 +529,11 @@ export function NotesView({
           r.name.toLowerCase().includes("rag") || r.name.toLowerCase().includes("llm")
       );
       if (isRAG || spaceName.toLowerCase().includes("rag") || spaceName.toLowerCase().includes("llm")) {
-        return DEFAULT_NOTES_LINES;
+        return [];
       }
-      return [
-        {
-          id: `line-${Date.now()}-1`,
-          text: `Notes on ${initialResources[0].name.replace(/\.[^/.]+$/, "")}`,
-          type: "h1",
-        },
-        {
-          id: `line-${Date.now()}-2`,
-          text: `This document represents the automatically generated notes for your resource: ${initialResources[0].name}.`,
-          type: "plain",
-        },
-        {
-          id: `line-${Date.now()}-3`,
-          text: "Key Takeaways",
-          type: "h2",
-        },
-        {
-          id: `line-${Date.now()}-4`,
-          text: "Key Takeaway 1: Essential parameter or definition extracted from this source.",
-          type: "bullet",
-        },
-        {
-          id: `line-${Date.now()}-5`,
-          text: "Key Takeaway 2: Contextual details or supporting evidence.",
-          type: "bullet",
-        },
-        {
-          id: `line-${Date.now()}-6`,
-          text: "Summary of Findings",
-          type: "h2",
-        },
-        {
-          id: `line-${Date.now()}-7`,
-          text: "The resource provides a comprehensive view on its main subject, proposing several actionable recommendations.",
-          type: "plain",
-        },
-      ];
+      return [];
     }
-    return DEFAULT_NOTES_LINES;
+    return [];
   });
 
   const [activeSlashLineId, setActiveSlashLineId] = useState<string | null>(null);
@@ -664,8 +631,6 @@ export function NotesView({
     const initialMap: Record<string, DocLine[]> = {};
     if (initialResources && initialResources.length > 0) {
       initialMap[initialResources[0].id] = lines;
-    } else {
-      initialMap["res-rag"] = DEFAULT_NOTES_LINES;
     }
     return initialMap;
   });

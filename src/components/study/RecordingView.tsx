@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { streamPolish, readStream } from "@/lib/api";
 import {
   Folder,
   ChevronRight,
@@ -159,12 +160,16 @@ const POLISHED_LECTURE_NOTES: DocLine[] = [
 
 export function RecordingView({
   spaceName = "New notes",
+  spaceId,
+  folderId,
   visibility: initialVisibility = "members",
   initialDraft = "",
   onUpdateVisibility,
   onBack,
 }: {
   spaceName?: string;
+  spaceId?: string;
+  folderId?: string;
   visibility?: "me" | "members" | "public";
   initialDraft?: string;
   onUpdateVisibility?: (vis: "me" | "members" | "public") => void;
@@ -743,11 +748,36 @@ export function RecordingView({
     navigator.clipboard.writeText(fullText);
   };
 
-  const handlePolishNotes = () => {
+  const handlePolishNotes = async () => {
     setIsPolishing(true);
     if (recordingState === "recording") {
       setRecordingState("paused");
     }
+
+    const rawText = lines.map((l) => l.text).join("\n");
+
+    if (spaceId && rawText.trim()) {
+      try {
+        const response = await streamPolish({ spaceId, rawText });
+        let polished = "";
+        await readStream(response, (chunk) => {
+          polished += chunk;
+        });
+        // Parse polished text into doc lines
+        const polishedLines: DocLine[] = polished.split("\n").filter(Boolean).map((text, i) => ({
+          id: `p-${Date.now()}-${i}`,
+          text,
+          type: text.startsWith("#") ? "h2" : "plain" as DocLine["type"],
+        }));
+        setIsPolishing(false);
+        updateLinesAndHistory(polishedLines.length > 0 ? polishedLines : POLISHED_LECTURE_NOTES);
+        return;
+      } catch (err) {
+        console.error("Polish failed:", err);
+      }
+    }
+
+    // Fallback
     setTimeout(() => {
       setIsPolishing(false);
       updateLinesAndHistory(POLISHED_LECTURE_NOTES);
@@ -1359,6 +1389,7 @@ export function RecordingView({
       <KnowledgeSelectorModal
         isOpen={chatKnowledgeOpen}
         onClose={() => setChatKnowledgeOpen(false)}
+        folderId={folderId}
         onSelectMultiple={(fileNames) => {
           fileNames.forEach((name) => addChatResourceItem(name));
           setChatKnowledgeOpen(false);

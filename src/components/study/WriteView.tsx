@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { streamWrite, readStream } from "@/lib/api";
 import {
   Folder,
   ChevronRight,
@@ -67,6 +68,8 @@ interface DocLine {
 
 export function WriteView({
   spaceName = "Write",
+  spaceId,
+  folderId,
   visibility: initialVisibility = "members",
   isConfigured = false,
   initialDraft = "",
@@ -75,6 +78,8 @@ export function WriteView({
   onBack,
 }: {
   spaceName?: string;
+  spaceId?: string;
+  folderId?: string;
   visibility?: "me" | "members" | "public";
   isConfigured?: boolean;
   initialDraft?: string;
@@ -389,40 +394,87 @@ export function WriteView({
   };
 
   // Generate Draft Action
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!promptText.trim()) return;
     setGenerating(true);
 
-    setTimeout(() => {
-      // Create mock premium text depending on settings
-      const toneStr = tone ? `Tone: ${tone}` : "Tone: Academic";
-      const tenseStr = tense ? `Tense: ${tense}` : "Tense: Present";
-      const persStr = perspective ? `Perspective: ${perspective}` : "Perspective: Third Person";
-      
-      const generatedText = `Understanding the RAS Systems\n\n` +
-        `As I delve into the intricacies of the Renin-Angiotensin System (RAS), I find it essential to comprehend its role in regulating blood pressure and fluid balance in the human body. The RAS is a complex network of hormones and enzymes that work together to maintain homeostasis, particularly in response to changes in blood volume and pressure. Understanding this system not only enhances my knowledge of human physiology but also allows me to appreciate its clinical significance in various cardiovascular diseases.\n\n` +
-        `At the core of the RAS is the enzyme renin, which is secreted by the juxtaglomerular cells of the kidneys in response to low blood pressure, low sodium concentration, or sympathetic nervous system stimulation. When I consider the triggers for renin release, I recognize that they highlight the body's ability to sense and respond to changes in its internal environment. Renin acts on angiotensinogen, a protein produced by the liver, converting it into angiotensin I. This initial step in the RAS is crucial, as it sets the stage for subsequent transformations that ultimately influence blood pressure regulation.\n\n` +
-        `The next phase in this cascade involves the conversion of angiotensin I to angiotensin II, primarily facilitated by the angiotensin-converting enzyme (ACE), which is predominantly found in the lungs. As I explore this process, I note that angiotensin II is a potent vasoconstrictor, meaning it narrows blood vessels, thereby increasing blood pressure. This action is vital; it serves as an immediate response to situations where blood pressure needs to be elevated. Furthermore, angiotensin II has several additional effects, including stimulating the release of aldosterone from the adrenal glands, which promotes sodium and water reabsorption in the kidneys. This mechanism further contributes to the increase in blood volume and, consequently, blood pressure.`;
+    if (spaceId) {
+      try {
+        const response = await streamWrite({
+          spaceId,
+          prompt: promptText.trim(),
+          mode: "generate",
+        });
+        let fullText = "";
+        await readStream(response, (chunk) => {
+          fullText += chunk;
+          const parsed = parseTextToLines(fullText);
+          setLines(parsed);
+        });
+        setGenerating(false);
+        const parsed = parseTextToLines(fullText);
+        setLines(parsed);
+        setHistory([parsed]);
+        setHistoryIndex(0);
+        if (onCompleteConfig) {
+          onCompleteConfig(promptText.trim().slice(0, 32), fullText);
+        }
+        return;
+      } catch (err) {
+        console.error("Write generation failed:", err);
+      }
+    }
 
+    // Fallback: simulated generation
+    setTimeout(() => {
+      const generatedText = `Understanding the RAS Systems\n\nAs I delve into the intricacies of the Renin-Angiotensin System (RAS), I find it essential to comprehend its role in regulating blood pressure and fluid balance in the human body.`;
       setGenerating(false);
       const parsed = parseTextToLines(generatedText);
       setLines(parsed);
       setHistory([parsed]);
       setHistoryIndex(0);
-
       if (onCompleteConfig) {
-        onCompleteConfig(promptText.trim().slice(0, 32) || "Understanding the RAS Systems", generatedText);
+        onCompleteConfig(promptText.trim().slice(0, 32) || "Draft", generatedText);
       }
     }, 2500);
   };
 
   // Continue Writing with AI Action
-  const handleContinueWriting = () => {
+  const handleContinueWriting = async () => {
     setContinuingAI(true);
+    const existingContent = lines.map((l) => l.text).join("\n");
+
+    if (spaceId) {
+      try {
+        const response = await streamWrite({
+          spaceId,
+          prompt: "Continue writing naturally from where I left off.",
+          mode: "continue",
+          existingContent,
+        });
+        let newText = "";
+        await readStream(response, (chunk) => {
+          newText += chunk;
+        });
+        const additionalLine: DocLine = {
+          id: `line-ai-cont-${Date.now()}`,
+          text: newText.trim(),
+          type: "plain",
+        };
+        const nextLines = [...lines, additionalLine];
+        updateLinesAndHistory(nextLines);
+        setContinuingAI(false);
+        return;
+      } catch (err) {
+        console.error("Continue writing failed:", err);
+      }
+    }
+
+    // Fallback
     setTimeout(() => {
       const additionalLine: DocLine = {
         id: `line-ai-cont-${Date.now()}`,
-        text: `Expanding on the renin-angiotensin system, the long-term regulation of blood pressure is heavily dependent on renal mechanisms. The kidneys dynamically adjust the rate of sodium excretion, which affects extracellular fluid volume and cardiac output. This physiological balance is essential for long-term health.`,
+        text: `Expanding on the topic, the long-term regulation is heavily dependent on renal mechanisms. The kidneys dynamically adjust the rate of sodium excretion, which affects extracellular fluid volume and cardiac output.`,
         type: "plain"
       };
       const nextLines = [...lines, additionalLine];
@@ -1086,6 +1138,7 @@ export function WriteView({
         <KnowledgeSelectorModal
           isOpen={knowledgeOpen}
           onClose={() => setKnowledgeOpen(false)}
+          folderId={folderId}
           onSelectMultiple={(fileNames) => {
             fileNames.forEach((name) => addResourceItem(name));
             setKnowledgeOpen(false);
@@ -1745,6 +1798,7 @@ export function WriteView({
       <KnowledgeSelectorModal
         isOpen={chatKnowledgeOpen}
         onClose={() => setChatKnowledgeOpen(false)}
+        folderId={folderId}
         onSelectMultiple={(fileNames) => {
           fileNames.forEach((name) => addChatResourceItem(name));
           setChatKnowledgeOpen(false);

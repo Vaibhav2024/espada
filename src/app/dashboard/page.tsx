@@ -50,6 +50,19 @@ import { ToolSelectorModal, QuizWizardModal, type VisibilityType } from "@/compo
 import { StudyGuideEditor } from "@/components/study/StudyGuideEditor";
 import { QuizEditor } from "@/components/study/QuizEditor";
 import { ChatView } from "@/components/study/ChatView";
+import {
+  fetchFolders,
+  createFolder as apiCreateFolder,
+  updateFolder as apiUpdateFolder,
+  deleteFolder as apiDeleteFolder,
+  fetchSpaces,
+  createSpace as apiCreateSpace,
+  updateSpace as apiUpdateSpace,
+  deleteSpace as apiDeleteSpace,
+  uploadAsset,
+  fetchKnowledgeItems,
+  type FolderData as ApiFolderData,
+} from "@/lib/api";
 
 type ToolId =
   | "study-guide"
@@ -398,20 +411,25 @@ export default function Dashboard() {
     });
   };
 
-  const handleSaveFolderRename = () => {
+  const handleSaveFolderRename = async () => {
     if (renameFolderId && renameFolderName.trim()) {
       if (renameFolderId === "default") {
         setDefaultFolderName(renameFolderName.trim());
       } else {
-        setFolders((prev) =>
-          prev.map((f) => (f.id === renameFolderId ? { ...f, name: renameFolderName.trim() } : f))
-        );
+        try {
+          await apiUpdateFolder(renameFolderId, { name: renameFolderName.trim() });
+          setFolders((prev) =>
+            prev.map((f) => (f.id === renameFolderId ? { ...f, name: renameFolderName.trim() } : f))
+          );
+        } catch (err) {
+          console.error("Failed to rename folder:", err);
+        }
       }
     }
     setRenameFolderId(null);
   };
 
-  const handleConfirmFolderDelete = () => {
+  const handleConfirmFolderDelete = async () => {
     if (deleteFolderId) {
       if (deleteFolderId === "default") {
         setHasDefaultFolder(false);
@@ -425,6 +443,11 @@ export default function Dashboard() {
           }
         }
       } else {
+        try {
+          await apiDeleteFolder(deleteFolderId);
+        } catch (err) {
+          console.error("Failed to delete folder:", err);
+        }
         setFolders((prev) => prev.filter((f) => f.id !== deleteFolderId));
         setSpaces((prev) => prev.filter((s) => s.folderId !== deleteFolderId));
         setKnowledgeItems((prev) => prev.filter((k) => k.folderId !== deleteFolderId));
@@ -453,21 +476,25 @@ export default function Dashboard() {
     return () => window.removeEventListener("click", handleClose);
   }, []);
 
-  const handleCreateFolder = (name: string, themeName: string, themeColor: string, iconName: string, isPublic: boolean) => {
-    const newId = `folder-${Date.now()}`;
-    const newFolder: FolderData = {
-      id: newId,
-      name,
-      themeName,
-      themeColor,
-      iconName,
-      isPublic,
-    };
-    setFolders((prev) => [...prev, newFolder]);
-    setActiveFolderId(newId);
-    setActiveSpaceId(null);
-    setActiveTool(null);
-    setFolderOpen(true);
+  const handleCreateFolder = async (name: string, themeName: string, themeColor: string, iconName: string, isPublic: boolean) => {
+    try {
+      const folder = await apiCreateFolder({ name, themeName, themeColor, iconName, isPublic });
+      const newFolder: FolderData = {
+        id: folder.id,
+        name: folder.name,
+        themeName: folder.themeName,
+        themeColor: folder.themeColor,
+        iconName: folder.iconName,
+        isPublic: folder.isPublic,
+      };
+      setFolders((prev) => [...prev, newFolder]);
+      setActiveFolderId(folder.id);
+      setActiveSpaceId(null);
+      setActiveTool(null);
+      setFolderOpen(true);
+    } catch (err) {
+      console.error("Failed to create folder:", err);
+    }
   };
 
   const handleSelectFolder = (id: string) => {
@@ -476,6 +503,86 @@ export default function Dashboard() {
     setActiveTool(null);
     setFolderOpen(true);
   };
+
+  // Load folders from the API on mount
+  useEffect(() => {
+    fetchFolders()
+      .then((apiFolders) => {
+        const mapped = apiFolders.map((f) => ({
+          id: f.id,
+          name: f.name,
+          themeName: f.themeName,
+          themeColor: f.themeColor,
+          iconName: f.iconName,
+          isPublic: f.isPublic,
+        }));
+
+        // If the API returned a "My folder" (auto-created from "default" virtual folder),
+        // use it as the active default folder instead of the virtual one
+        const autoCreatedDefault = mapped.find((f) => f.name === "My folder");
+        if (autoCreatedDefault) {
+          // Replace the virtual "default" with the real DB folder
+          setHasDefaultFolder(false);
+          setFolders(mapped);
+          setActiveFolderId(autoCreatedDefault.id);
+        } else {
+          setFolders(mapped);
+          if (mapped.length > 0 && !hasDefaultFolder) {
+            setActiveFolderId(mapped[0].id);
+          }
+        }
+      })
+      .catch(() => {
+        // API not available (e.g. no DB yet) — fall back to empty state
+      });
+  }, []);
+
+  // Load spaces when active folder changes
+  useEffect(() => {
+    if (!activeFolderId || activeFolderId === "default") return;
+    fetchSpaces(activeFolderId)
+      .then((apiSpaces) => {
+        const mapped: Space[] = apiSpaces.map((s) => ({
+          id: s.id,
+          name: s.name,
+          type: s.type,
+          category: s.category,
+          visibility: s.visibility,
+          isConfigured: s.isConfigured,
+          resources: [],
+          focusedResourceIds: [],
+          folderId: s.folderId,
+        }));
+        setSpaces((prev) => {
+          // Merge: keep spaces from other folders, replace this folder's spaces
+          const others = prev.filter((sp) => sp.folderId !== activeFolderId);
+          return [...others, ...mapped];
+        });
+      })
+      .catch(() => {});
+  }, [activeFolderId]);
+
+  // Load knowledge items when active folder changes
+  useEffect(() => {
+    if (!activeFolderId) return;
+    fetchKnowledgeItems(activeFolderId)
+      .then((items) => {
+        const mapped: KnowledgeItem[] = items.map((item) => ({
+          id: item.id,
+          name: item.asset.name,
+          type: item.asset.type === "link" ? "link" as const : "file" as const,
+          folderId: activeFolderId,
+          status: item.asset.status as KnowledgeItem["status"],
+          assetId: item.assetId,
+        }));
+        setKnowledgeItems((prev) => {
+          const others = prev.filter((k) => k.folderId !== activeFolderId);
+          return [...others, ...mapped];
+        });
+      })
+      .catch(() => {});
+  }, [activeFolderId]);
+
   const [activeTool, setActiveTool] = useState<ToolId | null>(null);
   const [folderOpen, setFolderOpen] = useState(true); // Default to true to show the spaces sidebar
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -486,41 +593,15 @@ export default function Dashboard() {
   const [showKnowledge, setShowKnowledge] = useState(false);
 
   // Dynamic spaces state
-  const [spaces, setSpaces] = useState<Space[]>([
-    {
-      id: "college-2026",
-      name: "College 2026",
-      type: "study-guide",
-      category: "shared",
-      visibility: "members",
-      isConfigured: true,
-      resources: [],
-      focusedResourceIds: [],
-      folderId: "default",
-    },
-    {
-      id: "untitled-space",
-      name: "Untitled space",
-      type: "chat",
-      category: "private",
-      visibility: "me",
-      isConfigured: true,
-      resources: [],
-      focusedResourceIds: [],
-      folderId: "default",
-    },
-  ]);
-  const [activeSpaceId, setActiveSpaceId] = useState<string | null>("college-2026");
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [activeSpaceId, setActiveSpaceId] = useState<string | null>(null);
   const [showToolSelector, setShowToolSelector] = useState(false);
   const [pendingPrivateSpace, setPendingPrivateSpace] = useState(false);
   const [showQuizWizard, setShowQuizWizard] = useState(false);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
 
-  useEffect(() => {
-    setSpaces((prev) =>
-      prev.filter((s) => s.isConfigured || s.id === activeSpaceId)
-    );
-  }, [activeSpaceId]);
+  // Note: removed the old useEffect that filtered unconfigured spaces
+  // Spaces now persist in the DB and should always be shown
 
   const handleBackToHub = () => {
     setActiveTool(null);
@@ -565,9 +646,43 @@ export default function Dashboard() {
     setFolderOpen(true);
   };
 
-  const handleSelectTool = (toolId: any) => {
-    const newId = `space-${Date.now()}`;
+  const handleSelectTool = async (toolId: any) => {
     const forcePrivate = pendingPrivateSpace;
+    const folderId = activeFolderId || undefined;
+
+    // Create space via API (resolveFolder handles "default" on the backend)
+    if (folderId) {
+      try {
+        const space = await apiCreateSpace(folderId, {
+          name: toolId === "recording" ? "New notes" : "Untitled space",
+          type: toolId,
+          category: forcePrivate ? "private" : (toolId === "chat" ? "private" : "shared"),
+          visibility: (forcePrivate || toolId === "chat") ? "me" : "members",
+        });
+        const newSpace: Space = {
+          id: space.id,
+          name: space.name,
+          type: space.type,
+          category: space.category,
+          visibility: space.visibility,
+          isConfigured: space.isConfigured,
+          resources: [],
+          focusedResourceIds: [],
+          folderId: space.folderId,
+        };
+        setSpaces((prev) => [...prev, newSpace]);
+        setActiveSpaceId(space.id);
+        setShowToolSelector(false);
+        setPendingPrivateSpace(false);
+        if (toolId === "quiz") setShowQuizWizard(true);
+        return;
+      } catch (err) {
+        console.error("Failed to create space:", err);
+      }
+    }
+
+    // Fallback: local-only (for "default" virtual folder or if API fails)
+    const newId = `space-${Date.now()}`;
     const newSpace: Space = {
       id: newId,
       name: toolId === "recording" ? "New notes" : "Untitled space",
@@ -577,7 +692,7 @@ export default function Dashboard() {
       isConfigured: toolId !== "quiz" && toolId !== "study-guide" && toolId !== "flashcards" && toolId !== "solve" && toolId !== "write" && toolId !== "notes",
       resources: [],
       focusedResourceIds: [],
-      folderId: activeFolderId || undefined,
+      folderId: folderId,
     };
 
     setSpaces((prev) => [...prev, newSpace]);
@@ -590,21 +705,27 @@ export default function Dashboard() {
     }
   };
 
-  const handleQuizWizardComplete = (method: "resources" | "own", visibility: VisibilityType) => {
+  const handleQuizWizardComplete = (method: "resources" | "own", visibility: VisibilityType, questions?: any[]) => {
     setSpaces((prev) =>
       prev.map((s) =>
         s.id === activeSpaceId
-          ? { ...s, quizMethod: method, visibility, isConfigured: true }
+          ? { ...s, quizMethod: method, visibility, isConfigured: true, quizQuestions: questions || [] }
           : s
       )
     );
     setShowQuizWizard(false);
+    if (activeSpaceId) {
+      apiUpdateSpace(activeSpaceId, { isConfigured: true, visibility }).catch(() => {});
+    }
   };
 
   const handleConfigQuiz = () => {
     setSpaces((prev) =>
       prev.map((s) => (s.id === activeSpaceId ? { ...s, isConfigured: true } : s))
     );
+    if (activeSpaceId) {
+      apiUpdateSpace(activeSpaceId, { isConfigured: true }).catch(() => {});
+    }
   };
 
   const handleRegenerateQuiz = () => {
@@ -613,13 +734,20 @@ export default function Dashboard() {
     setShowQuizWizard(true);
   };
 
-  const handleConfigStudyGuide = (visibility: VisibilityType, resources: any[]) => {
+  const handleConfigStudyGuide = (visibility: VisibilityType, resources: any[], generatedLines?: any[]) => {
     setSpaces((prev) =>
       prev.map((s) =>
-        s.id === activeSpaceId ? { ...s, visibility, resources, isConfigured: true } : s
+        s.id === activeSpaceId
+          ? { ...s, visibility, resources, isConfigured: true, generatedLines: generatedLines || [] }
+          : s
       )
     );
     setFolderOpen(false);
+
+    // Persist isConfigured to the database so it survives page refresh
+    if (activeSpaceId) {
+      apiUpdateSpace(activeSpaceId, { isConfigured: true, visibility }).catch(() => {});
+    }
   };
 
   const handleSaveStudyGuideText = (text: string) => {
@@ -631,10 +759,10 @@ export default function Dashboard() {
   const views: Record<ToolId, React.ReactNode> = {
     "study-guide": <StudyGuideView onBack={handleBackToHub} />,
     quiz: <QuizEditor spaceName="Quiz" visibility="members" onTakeQuiz={()=>{}} onGenerateQuestions={handleRegenerateQuiz} />,
-    flashcards: <FlashcardsView spaceName="Flashcards" visibility="members" isConfigured={true} onCompleteConfig={()=>{}} onBack={handleBackToHub} />,
-    solve: <SolveView spaceName="Solve" visibility="members" isConfigured={true} onBack={handleBackToHub} />,
-    write: <WriteView onBack={handleBackToHub} />,
-    recording: <RecordingView onBack={handleBackToHub} />,
+    flashcards: <FlashcardsView spaceName="Flashcards" folderId={activeFolderId || undefined} visibility="members" isConfigured={true} onCompleteConfig={()=>{}} onBack={handleBackToHub} />,
+    solve: <SolveView spaceName="Solve" folderId={activeFolderId || undefined} visibility="members" isConfigured={true} onBack={handleBackToHub} />,
+    write: <WriteView folderId={activeFolderId || undefined} onBack={handleBackToHub} />,
+    recording: <RecordingView folderId={activeFolderId || undefined} onBack={handleBackToHub} />,
     notes: (
       <NotesView
         spaceName="Notes"
@@ -655,6 +783,8 @@ export default function Dashboard() {
         mainContent = (
           <StudyGuideEditor
             spaceName={activeSpace.name}
+            spaceId={activeSpace.id}
+            folderId={activeFolderId || undefined}
             initialText={activeSpace.plainTextContent || ""}
             onSolve={handleConfigStudyGuide}
             onSaveText={handleSaveStudyGuideText}
@@ -664,6 +794,7 @@ export default function Dashboard() {
         mainContent = (
           <QuizEditor
             spaceName={activeSpace.name}
+            spaceId={activeSpace.id}
             visibility={activeSpace.visibility}
             onTakeQuiz={handleConfigQuiz}
             onGenerateQuestions={handleConfigQuiz}
@@ -674,12 +805,14 @@ export default function Dashboard() {
         mainContent = (
           <FlashcardsView
             spaceName={activeSpace.name}
+            folderId={activeFolderId || undefined}
             visibility={activeSpace.visibility}
             isConfigured={false}
             onCompleteConfig={() => {
               setSpaces((prev) =>
                 prev.map((s) => (s.id === activeSpace.id ? { ...s, isConfigured: true } : s))
               );
+              if (activeSpace.id) apiUpdateSpace(activeSpace.id, { isConfigured: true }).catch(() => {});
             }}
             onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
             onBack={handleBackToHub}
@@ -689,6 +822,7 @@ export default function Dashboard() {
         mainContent = (
           <SolveView
             spaceName={activeSpace.name}
+            folderId={activeFolderId || undefined}
             visibility={activeSpace.visibility}
             isConfigured={false}
             onCompleteConfig={(problemName) => {
@@ -696,6 +830,7 @@ export default function Dashboard() {
                 prev.map((s) => (s.id === activeSpace.id ? { ...s, name: problemName || s.name, isConfigured: true } : s))
               );
               setFolderOpen(false);
+              if (activeSpace.id) apiUpdateSpace(activeSpace.id, { isConfigured: true }).catch(() => {});
             }}
             onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
             onBack={handleBackToHub}
@@ -705,6 +840,7 @@ export default function Dashboard() {
         mainContent = (
           <WriteView
             spaceName={activeSpace.name}
+            folderId={activeFolderId || undefined}
             visibility={activeSpace.visibility}
             isConfigured={false}
             onCompleteConfig={(draftName, generatedText) => {
@@ -712,6 +848,7 @@ export default function Dashboard() {
                 prev.map((s) => (s.id === activeSpace.id ? { ...s, name: draftName || s.name, isConfigured: true, plainTextContent: generatedText } : s))
               );
               setFolderOpen(false);
+              if (activeSpace.id) apiUpdateSpace(activeSpace.id, { isConfigured: true }).catch(() => {});
             }}
             onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
             onBack={handleBackToHub}
@@ -721,6 +858,7 @@ export default function Dashboard() {
         mainContent = (
           <NotesEditor
             spaceName={activeSpace.name}
+            folderId={activeFolderId || undefined}
             onGenerate={(visibility, resources, generatedName) => {
               setSpaces((prev) =>
                 prev.map((s) =>
@@ -748,8 +886,11 @@ export default function Dashboard() {
         mainContent = (
           <StudyGuideView
             spaceName={activeSpace.name}
+            spaceId={activeSpace.id}
+            folderId={activeFolderId || undefined}
             visibility={activeSpace.visibility || "public"}
             resources={activeSpace.resources || []}
+            generatedLines={(activeSpace as any).generatedLines}
             onBack={handleBackToHub}
             onUpdateVisibility={(vis) => {
               setSpaces((prev) =>
@@ -764,6 +905,7 @@ export default function Dashboard() {
         mainContent = (
           <QuizEditor
             spaceName={activeSpace.name}
+            spaceId={activeSpace.id}
             visibility={activeSpace.visibility}
             onTakeQuiz={() => {}}
             onGenerateQuestions={handleRegenerateQuiz}
@@ -774,6 +916,7 @@ export default function Dashboard() {
         mainContent = (
           <FlashcardsView
             spaceName={activeSpace.name}
+            folderId={activeFolderId || undefined}
             visibility={activeSpace.visibility}
             isConfigured={true}
             onCompleteConfig={() => {}}
@@ -785,6 +928,7 @@ export default function Dashboard() {
         mainContent = (
           <SolveView
             spaceName={activeSpace.name}
+            folderId={activeFolderId || undefined}
             visibility={activeSpace.visibility}
             isConfigured={true}
             onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
@@ -795,6 +939,7 @@ export default function Dashboard() {
         mainContent = (
           <WriteView
             spaceName={activeSpace.name}
+            folderId={activeFolderId || undefined}
             visibility={activeSpace.visibility}
             isConfigured={true}
             initialDraft={activeSpace.plainTextContent}
@@ -806,6 +951,7 @@ export default function Dashboard() {
         mainContent = (
           <RecordingView
             spaceName={activeSpace.name}
+            folderId={activeFolderId || undefined}
             visibility={activeSpace.visibility}
             initialDraft={activeSpace.plainTextContent}
             onUpdateVisibility={(vis) => setSpaces(prev => prev.map(s => s.id === activeSpace.id ? {...s, visibility: vis} : s))}
@@ -832,6 +978,7 @@ export default function Dashboard() {
         mainContent = (
           <ChatView
             spaceName={activeSpace.name}
+            folderId={activeFolderId || undefined}
             resources={activeSpace.resources || []}
             focusedResourceIds={activeSpace.focusedResourceIds || []}
             initialMessages={activeSpace.initialMessages}
@@ -974,12 +1121,22 @@ export default function Dashboard() {
                   setShowQuizWizard(false);
                 }
               }}
-              onRenameSpace={(id, newName) => {
+              onRenameSpace={async (id, newName) => {
+                try {
+                  await apiUpdateSpace(id, { name: newName });
+                } catch (err) {
+                  console.error("Failed to rename space:", err);
+                }
                 setSpaces((prev) =>
                   prev.map((s) => (s.id === id ? { ...s, name: newName } : s))
                 );
               }}
-              onDeleteSpace={(id) => {
+              onDeleteSpace={async (id) => {
+                try {
+                  await apiDeleteSpace(id);
+                } catch (err) {
+                  console.error("Failed to delete space:", err);
+                }
                 setSpaces((prev) => prev.filter((s) => s.id !== id));
                 setActiveSpaceId((curr) => {
                   if (curr === id) {
@@ -1004,14 +1161,56 @@ export default function Dashboard() {
             <KnowledgePanel
               onClose={() => setShowKnowledge(false)}
               items={knowledgeItems.filter((k) => (k.folderId || "default") === activeFolderId)}
-              onAddItem={(name, type) => {
+              folderId={activeFolderId || undefined}
+              onAddItem={(name, type, assetId, status) => {
                 const newItem: KnowledgeItem = {
                   id: `k-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
                   name,
                   type,
                   folderId: activeFolderId || "",
+                  status: (status as KnowledgeItem["status"]) || "queued",
+                  assetId,
                 };
                 setKnowledgeItems((prev) => [...prev, newItem]);
+              }}
+              onUpdateItemStatus={(id, status) => {
+                setKnowledgeItems((prev) =>
+                  prev.map((k) => (k.id === id ? { ...k, status } : k))
+                );
+              }}
+              onRefresh={() => {
+                if (activeFolderId) {
+                  fetchKnowledgeItems(activeFolderId).then((items) => {
+                    const mapped: KnowledgeItem[] = items.map((item) => ({
+                      id: item.id,
+                      name: item.asset.name,
+                      type: item.asset.type === "link" ? "link" as const : "file" as const,
+                      folderId: activeFolderId,
+                      status: item.asset.status as KnowledgeItem["status"],
+                      assetId: item.assetId,
+                    }));
+                    setKnowledgeItems((prev) => {
+                      const others = prev.filter((k) => k.folderId !== activeFolderId);
+                      return [...others, ...mapped];
+                    });
+                  }).catch(() => {});
+
+                  // Also re-fetch folders to sync sidebar (handles auto-created "My folder")
+                  fetchFolders().then((apiFolders) => {
+                    const foldersMapped = apiFolders.map((f) => ({
+                      id: f.id, name: f.name, themeName: f.themeName,
+                      themeColor: f.themeColor, iconName: f.iconName, isPublic: f.isPublic,
+                    }));
+                    const autoCreated = foldersMapped.find((f) => f.name === "My folder");
+                    if (autoCreated && hasDefaultFolder) {
+                      setHasDefaultFolder(false);
+                      setFolders(foldersMapped);
+                      setActiveFolderId(autoCreated.id);
+                    } else if (foldersMapped.length > 0) {
+                      setFolders(foldersMapped);
+                    }
+                  }).catch(() => {});
+                }
               }}
             />
           </div>
@@ -1045,11 +1244,15 @@ export default function Dashboard() {
 
       <QuizWizardModal
         isOpen={showQuizWizard}
+        folderId={activeFolderId || undefined}
+        spaceId={activeSpaceId || undefined}
         onClose={() => {
           setShowQuizWizard(false);
           // Only delete the space if it was brand-new (quizMethod not yet set = never completed wizard)
-          if (activeSpace && !activeSpace.quizMethod) {
+          if (activeSpace && !activeSpace.quizMethod && !activeSpace.isConfigured) {
             setSpaces((prev) => prev.filter((s) => s.id !== activeSpaceId));
+            // Also delete from DB
+            if (activeSpaceId) apiDeleteSpace(activeSpaceId).catch(() => {});
             setActiveSpaceId(null);
           }
         }}

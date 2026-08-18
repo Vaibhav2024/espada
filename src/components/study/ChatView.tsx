@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { streamChat, readStream, uploadAsset, addSpaceResource, fetchMessages } from "@/lib/api";
 import {
   MessageSquare,
   Folder,
@@ -37,6 +38,8 @@ interface Message {
 
 export function ChatView({
   spaceName,
+  spaceId,
+  folderId,
   resources = [],
   focusedResourceIds = [],
   onAddResource,
@@ -49,6 +52,8 @@ export function ChatView({
   onInputChange,
 }: {
   spaceName: string;
+  spaceId?: string;
+  folderId?: string;
   resources: Resource[];
   focusedResourceIds: string[];
   onAddResource: (res: { id: string; name: string; loading: boolean }) => void;
@@ -70,19 +75,54 @@ export function ChatView({
   }, [initialInputText]);
 
   useEffect(() => {
-    if (messages.length === 1 && messages[0]?.sender === "user") {
-      const timer = setTimeout(() => {
-        const aiMsg: Message = {
-          id: `msg-${Date.now() + 1}`,
-          sender: "ai",
-          text: `I've analyzed your prompt referencing your focused resources. What else can I assist you with in this workspace?`,
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        };
-        setMessages((prev) => [...prev, aiMsg]);
-      }, 1000);
-      return () => clearTimeout(timer);
+    // If mounted with an initial user message, trigger real AI response
+    if (messages.length === 1 && messages[0]?.sender === "user" && spaceId) {
+      const msg = messages[0].text;
+      const aiMsgId = `msg-${Date.now() + 1}`;
+      const aiMsg: Message = {
+        id: aiMsgId,
+        sender: "ai",
+        text: "",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+
+      streamChat({ spaceId, message: msg, focusedResourceIds: focusedResourceIds.length > 0 ? focusedResourceIds : undefined })
+        .then((response) =>
+          readStream(response, (chunk) => {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === aiMsgId ? { ...m, text: m.text + chunk } : m))
+            );
+          })
+        )
+        .catch(() => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiMsgId ? { ...m, text: "I'm ready to help. What would you like to know?" } : m
+            )
+          );
+        });
     }
   }, []);
+
+  // Load chat history from DB on mount (persists across refresh)
+  useEffect(() => {
+    if (spaceId) {
+      fetchMessages(spaceId)
+        .then((history) => {
+          if (history.length > 0) {
+            setMessages(history.map((m) => ({
+              id: m.id,
+              sender: m.sender,
+              text: m.text,
+              timestamp: new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            })));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [spaceId]);
+
   const [uploadOpen, setUploadOpen] = useState(false);
   const [focusOpen, setFocusOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
@@ -165,11 +205,25 @@ export function ChatView({
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      Array.from(e.target.files).forEach((file) => {
-        triggerAddResource(file.name);
-      });
+      for (const file of Array.from(e.target.files)) {
+        const newId = `res-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+        onAddResource({ id: newId, name: file.name, loading: true });
+
+        try {
+          const asset = await uploadAsset(file);
+          // If we have a spaceId, also attach the asset to the space
+          if (spaceId) {
+            await addSpaceResource(spaceId, asset.id);
+          }
+          onUpdateResourceLoading(newId, false);
+          onToggleFocusResource(newId);
+        } catch (err) {
+          onUpdateResourceLoading(newId, false);
+          console.error("Upload failed:", err);
+        }
+      }
       setUploadOpen(false);
     }
   };
@@ -185,7 +239,7 @@ export function ChatView({
     textareaRef.current?.focus();
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!inputText.trim()) return;
 
     const userMsg: Message = {
@@ -196,18 +250,55 @@ export function ChatView({
     };
 
     setMessages((prev) => [...prev, userMsg]);
+    const messageText = inputText.trim();
     setInputText("");
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiMsg: Message = {
-        id: `msg-${Date.now() + 1}`,
-        sender: "ai",
-        text: `I've analyzed your prompt referencing your focused resources. What else can I assist you with in this workspace?`,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
-      setMessages((prev) => [...prev, aiMsg]);
-    }, 1000);
+    // Create a placeholder AI message for streaming
+    const aiMsgId = `msg-${Date.now() + 1}`;
+    const aiMsg: Message = {
+      id: aiMsgId,
+      sender: "ai",
+      text: "",
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+    setMessages((prev) => [...prev, aiMsg]);
+
+    // If we have a spaceId, call the real API with streaming
+    if (spaceId) {
+      try {
+        const response = await streamChat({
+          spaceId,
+          message: messageText,
+          focusedResourceIds: focusedResourceIds.length > 0 ? focusedResourceIds : undefined,
+        });
+        await readStream(response, (chunk) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiMsgId ? { ...m, text: m.text + chunk } : m
+            )
+          );
+        });
+      } catch (err) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === aiMsgId
+              ? { ...m, text: "Sorry, I couldn't process your request right now. Please try again." }
+              : m
+          )
+        );
+      }
+    } else {
+      // Fallback: simulated response when no spaceId (e.g. default virtual folder)
+      setTimeout(() => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === aiMsgId
+              ? { ...m, text: "I've analyzed your prompt. What else can I assist you with?" }
+              : m
+          )
+        );
+      }, 1000);
+    }
   };
 
   const filteredResources = resources.filter((r) =>
@@ -523,6 +614,7 @@ export function ChatView({
       <KnowledgeSelectorModal
         isOpen={knowledgeOpen}
         onClose={() => setKnowledgeOpen(false)}
+        folderId={folderId}
         onSelectMultiple={handleSelectMultipleKnowledge}
       />
     </div>

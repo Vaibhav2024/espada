@@ -68,3 +68,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+
+# Uploads (local file storage)
+/uploads
+
+# Drizzle migrations (generated)
+/drizzle
+
+# Worker build output
+/dist

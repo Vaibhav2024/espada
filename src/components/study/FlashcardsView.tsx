@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { generateFlashcards } from "@/lib/api";
 import {
   Layers, ChevronRight, X, Play, Sparkles, Pencil, Trash2, Check, Plus, Folder, Globe,
   GripVertical, FileText, Link2, FileUp, FolderHeart, ChevronDown, User, Users, RotateCcw,
@@ -49,6 +50,8 @@ function makeDemoCards(topic: string, count: number): Flashcard[] {
 
 export function FlashcardsView({
   spaceName,
+  spaceId,
+  folderId,
   visibility: initialVisibility = "public",
   isConfigured: initialConfigured = false,
   onCompleteConfig,
@@ -56,6 +59,8 @@ export function FlashcardsView({
   onBack,
 }: {
   spaceName: string;
+  spaceId?: string;
+  folderId?: string;
   visibility?: VisibilityType;
   isConfigured?: boolean;
   onCompleteConfig: () => void;
@@ -65,9 +70,7 @@ export function FlashcardsView({
   const [isConfigured, setIsConfigured] = useState(initialConfigured);
   const [visibility, setVisibility] = useState<VisibilityType>(initialVisibility);
   const [visOpen, setVisOpen] = useState(false);
-  const [cards, setCards] = useState<Flashcard[]>(
-    initialConfigured ? makeDemoCards(spaceName, 10) : []
-  );
+  const [cards, setCards] = useState<Flashcard[]>([]);
 
   // AI Generator Modal State
   const [showWizard, setShowWizard] = useState(!initialConfigured);
@@ -141,10 +144,27 @@ export function FlashcardsView({
     }
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     setGenerating(true);
+    const count = parseInt(maxAmount) || 10;
+
+    if (spaceId) {
+      try {
+        const result = await generateFlashcards({ spaceId, count });
+        setCards(result.map((c) => ({ id: c.id, front: c.front, back: c.back })));
+        setGenerating(false);
+        setShowWizard(false);
+        setIsConfigured(true);
+        onCompleteConfig();
+        return;
+      } catch (err) {
+        console.error("Failed to generate flashcards:", err);
+      }
+    }
+
+    // Fallback: use demo cards if no spaceId or API fails
     setTimeout(() => {
-      const generated = makeDemoCards(topic || spaceName, parseInt(maxAmount) || 10);
+      const generated = makeDemoCards(topic || spaceName, count);
       setCards(generated);
       setGenerating(false);
       setShowWizard(false);
@@ -695,6 +715,7 @@ export function FlashcardsView({
       <KnowledgeSelectorModal
         isOpen={knowledgeOpen}
         onClose={() => setKnowledgeOpen(false)}
+        folderId={folderId}
         onSelectMultiple={(fileNames) => {
           fileNames.forEach((name) => addResourceItem(name));
           setKnowledgeOpen(false);

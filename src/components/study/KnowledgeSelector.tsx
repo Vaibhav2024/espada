@@ -1,23 +1,40 @@
-import { useState } from "react";
-import { FileText, X, Check } from "lucide-react";
+"use client";
+import { useState, useEffect } from "react";
+import { FileText, X, Check, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
-
-export const PRE_UPLOADED_DOCUMENTS = [
-  "Vaibhav_Patil_Resume.docx",
-  "Indus_Combined_Final_Quotation.docx",
-  "biology_lecture_ch4.pdf",
-];
+import { fetchKnowledgeItems, type KnowledgeItemData } from "@/lib/api";
 
 export function KnowledgeSelectorModal({
   isOpen,
   onClose,
   onSelectMultiple,
+  folderId,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSelectMultiple: (fileNames: string[]) => void;
+  folderId?: string;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
+  const [documents, setDocuments] = useState<{ name: string; status: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Load knowledge items from API when modal opens
+  useEffect(() => {
+    if (isOpen && folderId) {
+      setLoading(true);
+      fetchKnowledgeItems(folderId)
+        .then((items) => {
+          setDocuments(
+            items
+              .filter((item) => item.asset.status === "ready")
+              .map((item) => ({ name: item.asset.name, status: item.asset.status }))
+          );
+        })
+        .catch(() => setDocuments([]))
+        .finally(() => setLoading(false));
+    }
+  }, [isOpen, folderId]);
 
   const toggleSelect = (fileName: string) => {
     setSelected((prev) =>
@@ -52,24 +69,38 @@ export function KnowledgeSelectorModal({
         </div>
 
         <div className="mt-4 space-y-2 max-h-[250px] overflow-y-auto">
-          {PRE_UPLOADED_DOCUMENTS.map((doc) => {
-            const isChecked = selected.includes(doc);
-            return (
-              <div
-                key={doc}
-                onClick={() => toggleSelect(doc)}
-                className="flex items-center justify-between rounded-xl border border-border bg-[#27272a]/20 px-3.5 py-3 cursor-pointer hover:bg-[#27272a] transition-colors"
-              >
-                <div className="flex items-center gap-3 text-xs font-semibold text-foreground">
-                  <FileText size={15} className="text-muted-foreground" />
-                  <span>{doc}</span>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 size={20} className="text-muted-foreground animate-spin" />
+              <span className="ml-2 text-xs text-muted-foreground">Loading knowledge...</span>
+            </div>
+          ) : documents.length === 0 ? (
+            <div className="flex flex-col items-center py-8 text-center">
+              <FileText size={24} className="text-muted-foreground mb-2" />
+              <p className="text-xs text-muted-foreground">
+                No documents ready yet. Upload files to the Knowledge section first.
+              </p>
+            </div>
+          ) : (
+            documents.map((doc) => {
+              const isChecked = selected.includes(doc.name);
+              return (
+                <div
+                  key={doc.name}
+                  onClick={() => toggleSelect(doc.name)}
+                  className="flex items-center justify-between rounded-xl border border-border bg-[#27272a]/20 px-3.5 py-3 cursor-pointer hover:bg-[#27272a] transition-colors"
+                >
+                  <div className="flex items-center gap-3 text-xs font-semibold text-foreground">
+                    <FileText size={15} className="text-muted-foreground" />
+                    <span>{doc.name}</span>
+                  </div>
+                  <div className="flex size-4 items-center justify-center rounded border border-muted-foreground shrink-0 bg-transparent">
+                    {isChecked && <Check size={11} className="text-foreground" />}
+                  </div>
                 </div>
-                <div className="flex size-4 items-center justify-center rounded border border-muted-foreground shrink-0 bg-transparent">
-                  {isChecked && <Check size={11} className="text-foreground" />}
-                </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
 
         <button

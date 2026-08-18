@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { addSpaceResource, fetchKnowledgeItems, uploadAsset, generateStudyGuide } from "@/lib/api";
 import {
   Folder,
   ChevronRight,
@@ -29,12 +30,16 @@ interface Resource {
 
 export function StudyGuideEditor({
   spaceName,
+  spaceId,
+  folderId,
   onSolve,
   onSaveText,
   initialText = "",
 }: {
   spaceName: string;
-  onSolve: (visibility: VisibilityType, resources: Resource[]) => void;
+  spaceId?: string;
+  folderId?: string;
+  onSolve: (visibility: VisibilityType, resources: Resource[], generatedLines?: any[]) => void;
   onSaveText: (text: string) => void;
   initialText?: string;
 }) {
@@ -67,18 +72,21 @@ export function StudyGuideEditor({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Simulates adding a resource with a 3-second loader
-  const addResourceItem = (name: string) => {
+  // Adds a resource to the list — marks as ready immediately for Knowledge items,
+  // uses real upload for files
+  const addResourceItem = (name: string, alreadyEmbedded = false) => {
     const newId = `res-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
-    const newRes: Resource = { id: newId, name, loading: true };
+    const newRes: Resource = { id: newId, name, loading: !alreadyEmbedded };
     setResources((prev) => [...prev, newRes]);
-    
-    // 3 second loading simulation
-    setTimeout(() => {
-      setResources((prev) =>
-        prev.map((r) => (r.id === newId ? { ...r, loading: false } : r))
-      );
-    }, 3000);
+
+    if (!alreadyEmbedded) {
+      // For newly uploaded files, mark ready after a delay (real upload handles status separately)
+      setTimeout(() => {
+        setResources((prev) =>
+          prev.map((r) => (r.id === newId ? { ...r, loading: false } : r))
+        );
+      }, 3000);
+    }
   };
 
   const handleAddLink = () => {
@@ -105,25 +113,64 @@ export function StudyGuideEditor({
     }
   };
 
-  const handleSelectMultipleKnowledge = (fileNames: string[]) => {
+  const handleSelectMultipleKnowledge = async (fileNames: string[]) => {
+    // Add resources to UI immediately (already embedded, no loading needed)
     fileNames.forEach((fileName) => {
-      addResourceItem(fileName);
+      addResourceItem(fileName, true);
     });
     setAddMenuOpen(false);
+
+    // Link existing knowledge assets to this space (no re-embedding needed)
+    if (spaceId && folderId) {
+      try {
+        const items = await fetchKnowledgeItems(folderId);
+        for (const fileName of fileNames) {
+          const match = items.find((item) => item.asset.name === fileName);
+          if (match) {
+            await addSpaceResource(spaceId, match.assetId);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to link knowledge resources:", err);
+      }
+    }
   };
 
   const handleRemoveResource = (id: string) => {
     setResources((prev) => prev.filter((r) => r.id !== id));
   };
 
-  const handleGenerate = () => {
-    // Save plain text content or metadata if relevant
+  const [generating, setGenerating] = useState(false);
+
+  const handleGenerate = async () => {
     onSaveText(importantTopics);
-    onSolve(visibility, resources);
+    setGenerating(true);
+
+    if (spaceId) {
+      try {
+        // Call the real LLM endpoint — retrieves asset_chunks for linked resources
+        const lines = await generateStudyGuide({
+          spaceId,
+          topic: importantTopics || undefined,
+          folderId: folderId || undefined,
+        });
+        setGenerating(false);
+        // Pass generated lines to parent so it transitions with content ready
+        onSolve(visibility, resources, lines);
+      } catch (err) {
+        console.error("Study guide generation failed:", err);
+        setGenerating(false);
+        // Still transition even if API fails — user can retry or edit manually
+        onSolve(visibility, resources);
+      }
+    } else {
+      setGenerating(false);
+      onSolve(visibility, resources);
+    }
   };
 
   const isGenerateDisabled =
-    resources.length === 0 || resources.some((r) => r.loading);
+    generating || resources.length === 0 || resources.some((r) => r.loading);
 
   const getVisibilityLabel = (vis: VisibilityType) => {
     if (vis === "public") return "Public";
@@ -417,7 +464,14 @@ export function StudyGuideEditor({
             disabled={isGenerateDisabled}
             className="rounded-xl bg-foreground px-6 py-2.5 text-xs font-semibold text-background hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
-            Generate study guide
+            {generating ? (
+              <span className="flex items-center gap-2">
+                <span className="size-3.5 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                Generating...
+              </span>
+            ) : (
+              "Generate study guide"
+            )}
           </button>
         </div>
       </div>
@@ -426,6 +480,7 @@ export function StudyGuideEditor({
       <KnowledgeSelectorModal
         isOpen={knowledgeOpen}
         onClose={() => setKnowledgeOpen(false)}
+        folderId={folderId}
         onSelectMultiple={handleSelectMultipleKnowledge}
       />
     </div>

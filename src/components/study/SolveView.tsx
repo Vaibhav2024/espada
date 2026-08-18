@@ -55,6 +55,7 @@ interface ChatMessage {
 
 export function SolveView({
   spaceName,
+  folderId,
   visibility: initialVisibility = "members",
   isConfigured = false,
   onCompleteConfig,
@@ -62,6 +63,7 @@ export function SolveView({
   onBack,
 }: {
   spaceName: string;
+  folderId?: string;
   visibility?: "me" | "members" | "public";
   isConfigured?: boolean;
   onCompleteConfig?: (problemName: string) => void;
@@ -110,10 +112,8 @@ export function SolveView({
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
   // Space/Solve resources state
-  const [spaceResources, setSpaceResources] = useState<Resource[]>([
-    { id: "res-default-1", name: "Maya's Apple Purchase and Change.pdf", loading: false }
-  ]);
-  const [focusedResourceIds, setFocusedResourceIds] = useState<string[]>(["res-default-1"]);
+  const [spaceResources, setSpaceResources] = useState<Resource[]>([]);
+  const [focusedResourceIds, setFocusedResourceIds] = useState<string[]>([]);
 
   // Right-click Context Menu State for Problems
   const [problemContextMenu, setProblemContextMenu] = useState<{
@@ -130,29 +130,8 @@ export function SolveView({
   const [chatCollapsed, setChatCollapsed] = useState(false);
   
   // Problems database state
-  const [problems, setProblems] = useState<SolveProblem[]>(() => {
-    if (isConfigured) {
-      return [
-        {
-          id: "prob-maya",
-          title: "Problem 1",
-          question: "Maya buys 2.5 kg of apples at ₹180 per kg. If she gives the shopkeeper a ₹500 note, how much change does she get back?",
-          answer: "50",
-          steps: [
-            "First, we need to calculate the total cost of the apples that Maya is buying. She is purchasing apples at a rate of ₹180 per kg and she buys 2.5 kg. To find the total price, we use the formula: Total Cost = Price per kg × Quantity (kg) Substituting the values: Total Cost = 180 × 2.5",
-            "Now let's perform the multiplication to find the total cost. Calculating, we have: Total Cost = 180 × 2.5 = 450 So, the total cost of the apples is ₹450.",
-            "Next, to find out how much change Maya receives from the shopkeeper after paying with a ₹500 note, we subtract the total cost from the amount given: Change = Amount given − Total Cost Here, the amount given is ₹500, so: Change = 500 − 450",
-            "Now we perform the subtraction to find the amount of change. Calculating, we have: Change = 500 − 450 = 50 Thus, Maya will receive ₹50 as change."
-          ]
-        }
-      ];
-    }
-    return [];
-  });
-  const [activeProblemId, setActiveProblemId] = useState<string | null>(() => {
-    if (isConfigured) return "prob-maya";
-    return null;
-  });
+  const [problems, setProblems] = useState<SolveProblem[]>([]);
+  const [activeProblemId, setActiveProblemId] = useState<string | null>(null);
 
   // Popup overlay to add more problems
   const [showAddPopup, setShowAddPopup] = useState(false);
@@ -586,6 +565,7 @@ export function SolveView({
         <KnowledgeSelectorModal
           isOpen={knowledgeOpen}
           onClose={() => setKnowledgeOpen(false)}
+          folderId={folderId}
           onSelectMultiple={(fileNames) => {
             fileNames.forEach((name) => addResourceItem(name));
             setKnowledgeOpen(false);
@@ -1198,6 +1178,7 @@ export function SolveView({
           <KnowledgeSelectorModal
             isOpen={popupKnowledgeOpen}
             onClose={() => setPopupKnowledgeOpen(false)}
+            folderId={folderId}
             onSelectMultiple={(fileNames) => {
               fileNames.forEach((name) => addPopupResource(name));
               setPopupKnowledgeOpen(false);
@@ -1214,6 +1195,7 @@ export function SolveView({
       <KnowledgeSelectorModal
         isOpen={chatKnowledgeOpen}
         onClose={() => setChatKnowledgeOpen(false)}
+        folderId={folderId}
         onSelectMultiple={(fileNames) => {
           fileNames.forEach((name) => addChatResourceItem(name));
           setChatKnowledgeOpen(false);

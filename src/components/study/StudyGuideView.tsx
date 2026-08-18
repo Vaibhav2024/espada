@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { fetchDocLines } from "@/lib/api";
 import {
   Folder,
   ChevronRight,
@@ -126,16 +127,22 @@ const DEFAULT_LINES: DocLine[] = [
 
 export function StudyGuideView({
   spaceName = "Study Guide",
+  spaceId,
+  folderId,
   visibility: initialVisibility = "public",
   onBack,
   onUpdateVisibility,
   resources: initialResources = [],
+  generatedLines,
 }: {
   spaceName?: string;
+  spaceId?: string;
+  folderId?: string;
   visibility?: VisibilityType;
   onBack: () => void;
   onUpdateVisibility?: (vis: VisibilityType) => void;
   resources?: Resource[];
+  generatedLines?: Array<{ id: string; orderIndex: number; type: string; text: string }>;
 }) {
   const [visibility, setVisibility] = useState<VisibilityType>(initialVisibility);
   const [visibilityOpen, setVisibilityOpen] = useState(false);
@@ -143,53 +150,42 @@ export function StudyGuideView({
 
   // Document lines state
   const [lines, setLines] = useState<DocLine[]>(() => {
-    if (initialResources && initialResources.length > 0) {
-      if (initialResources[0].id === "res-resume") {
-        return DEFAULT_LINES;
-      }
-      return [
-        {
-          id: `line-${Date.now()}-1`,
-          text: `${initialResources[0].name.replace(/\.[^/.]+$/, "")} Study Guide Outline`,
-          type: "h1",
-        },
-        {
-          id: `line-${Date.now()}-2`,
-          text: `This study guide represents the automatically generated outline for your file: ${initialResources[0].name}.`,
-          type: "plain",
-        },
-        {
-          id: `line-${Date.now()}-3`,
-          text: "Executive Summary",
-          type: "h2",
-        },
-        {
-          id: `line-${Date.now()}-4`,
-          text: "Key Point 1: Essential definition or parameter extracted from this source.",
-          type: "bullet",
-        },
-        {
-          id: `line-${Date.now()}-5`,
-          text: "Key Point 2: Supporting arguments or contextual details.",
-          type: "bullet",
-        },
-        {
-          id: `line-${Date.now()}-6`,
-          text: "Practical Implications & Next Steps",
-          type: "h2",
-        },
-        {
-          id: `line-${Date.now()}-7`,
-          text: "Apply the findings to refine application architecture.",
-          type: "bullet",
-        },
-      ];
+    if (generatedLines && generatedLines.length > 0) {
+      return generatedLines.map((l) => ({
+        id: l.id,
+        text: l.text,
+        type: l.type as DocLine["type"],
+      }));
     }
-    return DEFAULT_LINES;
+    return [];
   });
   const [activeSlashLineId, setActiveSlashLineId] = useState<string | null>(null);
   const [activeMenuLineId, setActiveMenuLineId] = useState<string | null>(null);
   const [lineIndexMap, setLineIndexMap] = useState<Record<string, number>>({});
+
+  // Update lines when generatedLines arrive from API (async)
+  useEffect(() => {
+    if (generatedLines && generatedLines.length > 0) {
+      setLines(generatedLines.map((l) => ({
+        id: l.id,
+        text: l.text,
+        type: l.type as DocLine["type"],
+      })));
+    } else if (spaceId && lines.length === 0) {
+      // Load from DB on refresh (no generatedLines passed from parent)
+      fetchDocLines(spaceId)
+        .then((dbLines) => {
+          if (dbLines.length > 0) {
+            setLines(dbLines.map((l) => ({
+              id: l.id,
+              text: l.text,
+              type: l.type as DocLine["type"],
+            })));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [generatedLines, spaceId]);
 
   // Split pane & Collapse state
   const containerRef = useRef<HTMLDivElement>(null);
@@ -279,54 +275,7 @@ export function StudyGuideView({
     return "res-resume";
   });
   const [fileContentMap, setFileContentMap] = useState<Record<string, DocLine[]>>(() => {
-    if (initialResources && initialResources.length > 0) {
-      const initialMap: Record<string, DocLine[]> = {};
-      if (initialResources[0].id === "res-resume") {
-        initialMap["res-resume"] = DEFAULT_LINES;
-      } else {
-        initialMap[initialResources[0].id] = [
-          {
-            id: `line-${Date.now()}-1`,
-            text: `${initialResources[0].name.replace(/\.[^/.]+$/, "")} Study Guide Outline`,
-            type: "h1",
-          },
-          {
-            id: `line-${Date.now()}-2`,
-            text: `This study guide represents the automatically generated outline for your file: ${initialResources[0].name}.`,
-            type: "plain",
-          },
-          {
-            id: `line-${Date.now()}-3`,
-            text: "Executive Summary",
-            type: "h2",
-          },
-          {
-            id: `line-${Date.now()}-4`,
-            text: "Key Point 1: Essential definition or parameter extracted from this source.",
-            type: "bullet",
-          },
-          {
-            id: `line-${Date.now()}-5`,
-            text: "Key Point 2: Supporting arguments or contextual details.",
-            type: "bullet",
-          },
-          {
-            id: `line-${Date.now()}-6`,
-            text: "Practical Implications & Next Steps",
-            type: "h2",
-          },
-          {
-            id: `line-${Date.now()}-7`,
-            text: "Apply the findings to refine application architecture.",
-            type: "bullet",
-          },
-        ];
-      }
-      return initialMap;
-    }
-    return {
-      "res-resume": DEFAULT_LINES,
-    };
+    return {};
   });
 
   const updateLines = (newLines: DocLine[] | ((prev: DocLine[]) => DocLine[])) => {
@@ -874,6 +823,8 @@ export function StudyGuideView({
           <div className="flex-1 min-h-0">
             <ChatView
               spaceName={spaceName}
+              spaceId={spaceId}
+              folderId={folderId}
               resources={chatResources}
               focusedResourceIds={focusedResourceIds}
               onAddResource={handleAddResource}
