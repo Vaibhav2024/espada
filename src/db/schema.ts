@@ -39,6 +39,7 @@ export const subscriptions = pgTable("subscriptions", {
   razorpayCustomerId: text("razorpay_customer_id"),
   razorpaySubscriptionId: text("razorpay_subscription_id"),
   currentPeriodEnd: timestamp("current_period_end"),
+  bonusProUntil: timestamp("bonus_pro_until"),
 });
 
 // ─── Folders ──────────────────────────────────────────────────────────────────
@@ -138,6 +139,21 @@ export const knowledgeItems = pgTable("knowledge_items", {
   addedAt: timestamp("added_at").defaultNow().notNull(),
 });
 
+// ─── Invites (personal referral system) ──────────────────────────────────────
+
+export const invites = pgTable("invites", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  inviterId: text("inviter_id")
+    .references(() => users.id)
+    .notNull(),
+  inviteeId: text("invitee_id").references(() => users.id),
+  status: text("status", { enum: ["pending", "completed"] })
+    .default("pending")
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
 // ─── Spaces ──────────────────────────────────────────────────────────────────
 
 export const spaces = pgTable("spaces", {
@@ -166,6 +182,7 @@ export const spaces = pgTable("spaces", {
     .default("public")
     .notNull(),
   isConfigured: boolean("is_configured").default(false).notNull(),
+  transcriptSegments: jsonb("transcript_segments"),
   createdBy: text("created_by")
     .references(() => users.id)
     .notNull(),

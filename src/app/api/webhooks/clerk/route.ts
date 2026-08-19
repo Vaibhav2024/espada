@@ -1,7 +1,7 @@
 import { Webhook } from "svix";
 import { headers } from "next/headers";
 import { db } from "@/db";
-import { users, subscriptions } from "@/db/schema";
+import { users, subscriptions, invites } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type { WebhookEvent } from "@clerk/nextjs/server";
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   // Handle the event
   switch (event.type) {
     case "user.created": {
-      const { id, email_addresses, first_name, last_name, image_url } =
+      const { id, email_addresses, first_name, last_name, image_url, unsafe_metadata } =
         event.data;
       const email = email_addresses[0]?.email_address ?? "";
       const name = [first_name, last_name].filter(Boolean).join(" ") || null;
@@ -61,6 +61,45 @@ export async function POST(req: Request) {
         plan: "free",
         status: "active",
       });
+
+      // Handle referral code from unsafeMetadata (passed during sign-up)
+      const referralCode = (unsafe_metadata as Record<string, unknown>)?.referralCode as string | undefined;
+      if (referralCode) {
+        // Find the inviter by their personal inviteCode
+        const [inviter] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.inviteCode, referralCode))
+          .limit(1);
+
+        if (inviter && inviter.id !== id) {
+          // Create completed invite row
+          await db.insert(invites).values({
+            inviterId: inviter.id,
+            inviteeId: id,
+            status: "completed",
+            completedAt: new Date(),
+          });
+
+          // Extend inviter's bonusProUntil by +1 day
+          const [inviterSub] = await db
+            .select({ bonusProUntil: subscriptions.bonusProUntil })
+            .from(subscriptions)
+            .where(eq(subscriptions.userId, inviter.id))
+            .limit(1);
+
+          const now = new Date();
+          const currentBonus = inviterSub?.bonusProUntil;
+          // Start from whichever is later: current bonusProUntil or now
+          const baseDate = currentBonus && currentBonus > now ? currentBonus : now;
+          const newBonusEnd = new Date(baseDate.getTime() + 24 * 60 * 60 * 1000); // +1 day
+
+          await db
+            .update(subscriptions)
+            .set({ bonusProUntil: newBonusEnd })
+            .where(eq(subscriptions.userId, inviter.id));
+        }
+      }
 
       break;
     }

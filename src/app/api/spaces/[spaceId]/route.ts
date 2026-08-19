@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { spaces } from "@/db/schema";
 import { requireAuth } from "@/lib/auth";
+import { authorizeSpaceAccess } from "@/lib/authorize-space";
 import { eq } from "drizzle-orm";
 
 interface RouteParams {
@@ -12,8 +13,13 @@ interface RouteParams {
  * GET /api/spaces/:spaceId — Get a single space.
  */
 export async function GET(_req: NextRequest, { params }: RouteParams) {
-  await requireAuth();
+  const userId = await requireAuth();
   const { spaceId } = await params;
+
+  const auth = await authorizeSpaceAccess(spaceId, userId, "read");
+  if (!auth.allowed) {
+    return NextResponse.json({ error: auth.reason || "Access denied" }, { status: 403 });
+  }
 
   const [space] = await db
     .select()
@@ -35,18 +41,9 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   const userId = await requireAuth();
   const { spaceId } = await params;
 
-  const [space] = await db
-    .select()
-    .from(spaces)
-    .where(eq(spaces.id, spaceId))
-    .limit(1);
-
-  if (!space) {
-    return NextResponse.json({ error: "Space not found" }, { status: 404 });
-  }
-
-  if (space.createdBy !== userId) {
-    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  const auth = await authorizeSpaceAccess(spaceId, userId, "write");
+  if (!auth.allowed) {
+    return NextResponse.json({ error: auth.reason || "Access denied" }, { status: 403 });
   }
 
   const body = await req.json();
@@ -74,6 +71,7 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
   const userId = await requireAuth();
   const { spaceId } = await params;
 
+  // Only the creator can delete
   const [space] = await db
     .select()
     .from(spaces)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { spaceResources, assets } from "@/db/schema";
 import { requireAuth } from "@/lib/auth";
+import { authorizeSpaceAccess } from "@/lib/authorize-space";
 import { eq } from "drizzle-orm";
 
 interface RouteParams {
@@ -12,8 +13,13 @@ interface RouteParams {
  * GET /api/spaces/:spaceId/resources — List resources attached to a space.
  */
 export async function GET(_req: NextRequest, { params }: RouteParams) {
-  await requireAuth();
+  const userId = await requireAuth();
   const { spaceId } = await params;
+
+  const auth = await authorizeSpaceAccess(spaceId, userId, "read");
+  if (!auth.allowed) {
+    return NextResponse.json({ error: auth.reason || "Access denied" }, { status: 403 });
+  }
 
   const resources = await db
     .select({
@@ -36,8 +42,14 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
  * Body: { assetId: string, focused?: boolean }
  */
 export async function POST(req: NextRequest, { params }: RouteParams) {
-  await requireAuth();
+  const userId = await requireAuth();
   const { spaceId } = await params;
+
+  const auth = await authorizeSpaceAccess(spaceId, userId, "write");
+  if (!auth.allowed) {
+    return NextResponse.json({ error: auth.reason || "Access denied" }, { status: 403 });
+  }
+
   const { assetId, focused } = await req.json();
 
   if (!assetId) {

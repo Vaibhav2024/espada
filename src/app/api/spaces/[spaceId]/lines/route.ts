@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { docLines } from "@/db/schema";
 import { requireAuth } from "@/lib/auth";
+import { authorizeSpaceAccess } from "@/lib/authorize-space";
 import { eq, asc } from "drizzle-orm";
 
 interface RouteParams {
@@ -12,8 +13,13 @@ interface RouteParams {
  * GET /api/spaces/:spaceId/lines — Fetch all doc_lines for a space.
  */
 export async function GET(_req: NextRequest, { params }: RouteParams) {
-  await requireAuth();
+  const userId = await requireAuth();
   const { spaceId } = await params;
+
+  const auth = await authorizeSpaceAccess(spaceId, userId, "read");
+  if (!auth.allowed) {
+    return NextResponse.json({ error: auth.reason || "Access denied" }, { status: 403 });
+  }
 
   const lines = await db
     .select()
@@ -29,8 +35,13 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
  * Body: { lines: Array<{ type, text, tableData? }> }
  */
 export async function PUT(req: NextRequest, { params }: RouteParams) {
-  await requireAuth();
+  const userId = await requireAuth();
   const { spaceId } = await params;
+
+  const auth = await authorizeSpaceAccess(spaceId, userId, "write");
+  if (!auth.allowed) {
+    return NextResponse.json({ error: auth.reason || "Access denied" }, { status: 403 });
+  }
 
   const { lines } = await req.json();
 
@@ -50,7 +61,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         lines.map((line: { type: string; text: string; tableData?: unknown }, idx: number) => ({
           spaceId,
           orderIndex: idx,
-          type: line.type,
+          type: line.type as "h1" | "h2" | "h3" | "bullet" | "number" | "quote" | "plain" | "table",
           text: line.text || "",
           tableData: line.tableData ?? null,
         }))

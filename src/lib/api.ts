@@ -593,3 +593,67 @@ export async function fetchFlashcards(
   const res = await fetch(`/api/spaces/${spaceId}/flashcards`);
   return handleResponse<FlashcardData[]>(res);
 }
+
+// ─── User Profile ────────────────────────────────────────────────────────────
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string | null;
+  avatarUrl: string | null;
+  inviteCode: string;
+  subscription: {
+    plan: string;
+    status: string;
+    bonusProUntil: string | null;
+    currentPeriodEnd: string | null;
+  } | null;
+}
+
+export async function fetchUserProfile(): Promise<UserProfile> {
+  const res = await fetch("/api/me");
+  return handleResponse<UserProfile>(res);
+}
+
+// ─── Invites ─────────────────────────────────────────────────────────────────
+
+export interface InviteData {
+  id: string;
+  inviteeId: string | null;
+  status: string;
+  completedAt: string | null;
+  inviteeName: string | null;
+  inviteeEmail: string | null;
+}
+
+export async function fetchInvites(): Promise<InviteData[]> {
+  const res = await fetch("/api/invites");
+  return handleResponse<InviteData[]>(res);
+}
+
+// ─── Folder Members ──────────────────────────────────────────────────────────
+
+export interface FolderMemberData {
+  userId: string;
+  role: string;
+  joinedAt: string;
+  name: string | null;
+  email: string;
+  avatarUrl: string | null;
+}
+
+export async function fetchFolderMembers(folderId: string): Promise<FolderMemberData[]> {
+  const res = await fetch(`/api/folders/${folderId}/members`);
+  return handleResponse<FolderMemberData[]>(res);
+}
+
+// ─── Join Folder by Code ─────────────────────────────────────────────────────
+
+export async function joinFolderByCode(code: string): Promise<{ folderId: string }> {
+  const res = await fetch("/api/folders/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  return handleResponse<{ folderId: string }>(res);
+}

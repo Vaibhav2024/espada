@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { quizQuestions } from "@/db/schema";
 import { requireAuth } from "@/lib/auth";
+import { authorizeSpaceAccess } from "@/lib/authorize-space";
 import { eq, asc } from "drizzle-orm";
 
 interface RouteParams {
@@ -12,8 +13,13 @@ interface RouteParams {
  * GET /api/spaces/:spaceId/quiz — Fetch existing quiz questions for a space.
  */
 export async function GET(_req: NextRequest, { params }: RouteParams) {
-  await requireAuth();
+  const userId = await requireAuth();
   const { spaceId } = await params;
+
+  const auth = await authorizeSpaceAccess(spaceId, userId, "read");
+  if (!auth.allowed) {
+    return NextResponse.json({ error: auth.reason || "Access denied" }, { status: 403 });
+  }
 
   const questions = await db
     .select()

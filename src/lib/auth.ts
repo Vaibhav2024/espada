@@ -73,14 +73,33 @@ async function ensureUserExists(userId: string): Promise<void> {
 }
 
 /**
- * Get the user's current plan from the subscriptions table.
+ * Get the user's effective plan from the subscriptions table.
+ * A user is "pro" if either:
+ *   - subscription.plan === "pro" && status === "active"
+ *   - now < bonusProUntil (free Pro from invites)
  */
 export async function getUserPlan(userId: string): Promise<Plan> {
   const [sub] = await db
-    .select({ plan: subscriptions.plan })
+    .select({
+      plan: subscriptions.plan,
+      status: subscriptions.status,
+      bonusProUntil: subscriptions.bonusProUntil,
+    })
     .from(subscriptions)
     .where(eq(subscriptions.userId, userId))
     .limit(1);
 
-  return (sub?.plan as Plan) ?? "free";
+  if (!sub) return "free";
+
+  // Paid pro subscription active
+  if (sub.plan === "pro" && sub.status === "active") {
+    return "pro";
+  }
+
+  // Bonus pro from invites
+  if (sub.bonusProUntil && new Date() < sub.bonusProUntil) {
+    return "pro";
+  }
+
+  return "free";
 }

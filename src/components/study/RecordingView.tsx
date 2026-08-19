@@ -74,89 +74,41 @@ interface DocLine {
 }
 
 // ── SIMULATION TRANSCIPT & NOTES DATA ──
-const SIMULATED_LECTURE_STEPS = [
-  {
-    transcript: "Welcome back class. Today we are diving into cellular respiration.",
-    noteText: "Biology 101: Cellular Respiration Lecture Notes",
-    noteType: "h1" as const,
-  },
-  {
-    transcript: "We will focus on the mitochondrion, the power generator of the cell.",
-    noteText: "Mitochondria & ATP Generation",
-    noteType: "h2" as const,
-  },
-  {
-    transcript: "First, glycolysis breaks glucose down into pyruvate in the cytoplasm, yielding 2 ATP.",
-    noteText: "Glycolysis: cytoplasm process, breaks glucose into pyruvate, net gain +2 ATP.",
-    noteType: "bullet" as const,
-  },
-  {
-    transcript: "Second, the Krebs cycle takes place in the mitochondrial matrix, producing NADH and FADH2.",
-    noteText: "Krebs Cycle: matrix process, produces electron carriers NADH and FADH2.",
-    noteType: "bullet" as const,
-  },
-  {
-    transcript: "Finally, the electron transport chain builds a proton gradient across the inner membrane.",
-    noteText: "Electron Transport Chain: builds proton gradient across inner membrane.",
-    noteType: "bullet" as const,
-  },
-  {
-    transcript: "This proton gradient drives ATP synthase, which phosphorylates ADP into ATP.",
-    noteText: "ATP Synthase: membrane turbine driven by proton gradient to phosphorylate ADP -> ATP.",
-    noteType: "bullet" as const,
-  },
-  {
-    transcript: "Cyanide blocks Complex IV of the ETC, collapsing the gradient, which is why it is lethal.",
-    noteText: "Clinical correlation: Cyanide blocks Complex IV, halting ATP synthesis.",
-    noteType: "quote" as const,
-  },
-  {
-    transcript: "Let's summarize the ATP yields of each step of cellular respiration.",
-    noteText: "Summary of ATP Yields",
-    noteType: "h3" as const,
-  },
-  {
-    transcript: "Glycolysis gives 2, Krebs cycle 2, and ETC gives around 28 to 32 ATP depending on efficiency.",
-    noteText: "ATP Summary Table",
-    noteType: "table" as const,
-    tableData: {
-      headers: ["Stage", "Location", "Direct ATP Yield", "Electron Carriers"],
-      rows: [
-        ["Glycolysis", "Cytoplasm", "2 ATP", "2 NADH"],
-        ["Krebs Cycle", "Mitochondrial Matrix", "2 ATP", "6 NADH, 2 FADH2"],
-        ["Electron Transport Chain", "Inner Membrane", "~28 ATP", "None (consumes carriers)"]
-      ],
-      style: "default" as const
-    }
-  }
-];
+// (Removed — replaced by real Web Speech API implementation below)
 
-const POLISHED_LECTURE_NOTES: DocLine[] = [
-  { id: "p1", text: "Lecture Notes: Cellular Respiration", type: "h1" },
-  { id: "p2", text: "Overview of Cellular Metabolism", type: "h2" },
-  { id: "p3", text: "Cellular respiration is the process by which cells convert glucose and oxygen into ATP, carbon dioxide, and water. It occurs in three main stages: glycolysis, the Krebs cycle, and electron transport phosphorylation.", type: "plain" },
-  { id: "p4", text: "Key Metabolic Stages", type: "h2" },
-  { id: "p5", text: "Glycolysis: Occurs in the cytoplasm; anaerobic process that breaks glucose down into two molecules of pyruvate, yielding a net of 2 ATP and 2 NADH.", type: "bullet" },
-  { id: "p6", text: "Krebs Cycle (Citric Acid Cycle): Occurs in the mitochondrial matrix; aerobic process that oxidizes acetyl-CoA to CO2, generating 2 ATP, 6 NADH, and 2 FADH2 per glucose molecule.", type: "bullet" },
-  { id: "p7", text: "Electron Transport Chain (ETC): Occurs in the inner mitochondrial membrane; establishes a proton gradient used by ATP synthase to produce approximately 28 ATP.", type: "bullet" },
-  { id: "p8", text: "Metabolic Pathway Breakdown", type: "h3" },
-  {
-    id: "p9",
-    text: "Table",
-    type: "table",
-    tableData: {
-      headers: ["Pathway Stage", "Primary Input", "Location", "Net ATP Yield", "Key Outputs"],
-      rows: [
-        ["Glycolysis", "Glucose", "Cytoplasm", "2 ATP", "2 Pyruvate, 2 NADH"],
-        ["Krebs Cycle", "Pyruvate (as Acetyl-CoA)", "Mitochondrial Matrix", "2 ATP", "6 NADH, 2 FADH2, 4 CO2"],
-        ["ETC & ATP Synthase", "NADH, FADH2, O2", "Inner Membrane", "~28 ATP", "Water, NAD+, FAD"]
-      ],
-      style: "striped" as const
-    }
-  },
-  { id: "p10", text: "Clinical Correlation: Cyanide Toxicity", type: "h3" },
-  { id: "p11", text: "Cyanide is a potent cellular toxin that binds to cytochrome c oxidase in Complex IV of the electron transport chain. By preventing electron transfer to oxygen, it halts the proton pump, collapsing the gradient and stopping ATP synthesis, which leads to rapid cell death.", type: "quote" }
-];
+// Web Speech API type declarations for cross-browser support
+interface SpeechRecognitionType extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: SpeechRecognitionEventType) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventType) => void) | null;
+  onend: (() => void) | null;
+}
+
+interface SpeechRecognitionEventType {
+  resultIndex: number;
+  results: SpeechRecognitionResultListType;
+}
+
+interface SpeechRecognitionResultListType {
+  length: number;
+  [index: number]: SpeechRecognitionResultType;
+}
+
+interface SpeechRecognitionResultType {
+  isFinal: boolean;
+  0: { transcript: string };
+}
+
+interface SpeechRecognitionErrorEventType {
+  error: string;
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionType;
+
 
 export function RecordingView({
   spaceName = "New notes",
@@ -181,13 +133,31 @@ export function RecordingView({
   }, []);
 
   // Recording State & Variables
-  const [recordingState, setRecordingState] = useState<"idle" | "recording" | "paused">("idle");
+  const [recordingState, setRecordingState] = useState<"idle" | "recording" | "paused" | "stopping">("idle");
   const [seconds, setSeconds] = useState(0);
   const [liveTranscriptLines, setLiveTranscriptLines] = useState<string[]>([]);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
-  const [transcriptIndex, setTranscriptIndex] = useState(0);
+  const [interimText, setInterimText] = useState("");
   const [isPolishing, setIsPolishing] = useState(false);
+  const [speechNotSupported, setSpeechNotSupported] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionType | null>(null);
+  // Track elapsed recording time (only counts while actively recording)
+  const elapsedRef = useRef(0);
+  // Track segment start time for each utterance
+  const utteranceStartRef = useRef(0);
+  // Accumulate raw transcript text since last Stop
+  const segmentTranscriptRef = useRef("");
+  // Track transcript segments for persistence
+  const segmentEntriesRef = useRef<Array<{ startTime: string; endTime: string; text: string }>>([]);
+
+  // Check browser support on mount
+  useEffect(() => {
+    const SR = (window as unknown as { webkitSpeechRecognition?: SpeechRecognitionConstructor; SpeechRecognition?: SpeechRecognitionConstructor }).webkitSpeechRecognition || (window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor }).SpeechRecognition;
+    if (!SR) {
+      setSpeechNotSupported(true);
+    }
+  }, []);
 
   // Document lines state & undo/redo stacks
   const [lines, setLines] = useState<DocLine[]>([
@@ -678,48 +648,19 @@ export function RecordingView({
     updateLinesAndHistory(nextLines);
   };
 
-  // ── TRANSCIPT GENERATION SIMULATING TIMER TICK ──
+  // ── REAL WEB SPEECH API RECORDING LOGIC ──
   const formatTime = (totalSec: number) => {
     const mm = String(Math.floor(totalSec / 60)).padStart(2, "0");
     const ss = String(totalSec % 60).padStart(2, "0");
     return `${mm}:${ss}`;
   };
 
+  // Elapsed time counter — only counts while recording
   useEffect(() => {
     if (recordingState === "recording") {
       timerRef.current = setInterval(() => {
-        setSeconds((s) => {
-          const nextSec = s + 1;
-          
-          if (nextSec > 0 && nextSec % 5 === 0) {
-            setTranscriptIndex((prevIndex) => {
-              if (prevIndex < SIMULATED_LECTURE_STEPS.length) {
-                const step = SIMULATED_LECTURE_STEPS[prevIndex];
-                
-                // Append transcript text
-                setLiveTranscriptLines((prev) => [...prev, `[${formatTime(nextSec)}] ${step.transcript}`]);
-                
-                // Append editor note line
-                setLines((prevLines) => {
-                  const isEmptyOnly = prevLines.length === 1 && prevLines[0].text.trim() === "";
-                  const newLine: DocLine = {
-                    id: `line-sim-${Date.now()}-${prevIndex}`,
-                    text: step.noteText,
-                    type: step.noteType,
-                    tableData: step.tableData,
-                  };
-                  const updated = isEmptyOnly ? [newLine] : [...prevLines, newLine];
-                  setTimeout(() => commitLinesToHistory(updated), 50);
-                  return updated;
-                });
-
-                return prevIndex + 1;
-              }
-              return prevIndex;
-            });
-          }
-          return nextSec;
-        });
+        elapsedRef.current += 1;
+        setSeconds(elapsedRef.current);
       }, 1000);
     } else {
       if (timerRef.current) {
@@ -727,13 +668,173 @@ export function RecordingView({
         timerRef.current = null;
       }
     }
-
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
     };
   }, [recordingState]);
+
+  // Start/Stop speech recognition based on recordingState
+  const startRecognition = () => {
+    const SR = (window as unknown as { webkitSpeechRecognition?: SpeechRecognitionConstructor; SpeechRecognition?: SpeechRecognitionConstructor }).webkitSpeechRecognition || (window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor }).SpeechRecognition;
+    if (!SR) return;
+
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    utteranceStartRef.current = elapsedRef.current;
+
+    recognition.onresult = (event: SpeechRecognitionEventType) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          // Final result — append with timestamp
+          const startTime = formatTime(utteranceStartRef.current);
+          const endTime = formatTime(elapsedRef.current);
+          const timestamped = `${startTime}-${endTime}: ${transcript.trim()}`;
+          setLiveTranscriptLines((prev) => [...prev, timestamped]);
+          segmentTranscriptRef.current += transcript.trim() + " ";
+          segmentEntriesRef.current.push({
+            startTime,
+            endTime,
+            text: transcript.trim(),
+          });
+          // Reset utterance start for next segment
+          utteranceStartRef.current = elapsedRef.current;
+          setInterimText("");
+        } else {
+          interim += transcript;
+        }
+      }
+      if (interim) {
+        setInterimText(interim);
+      }
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEventType) => {
+      if (event.error === "no-speech" || event.error === "aborted") {
+        // These are non-fatal — recognition continues or is expected to stop
+        return;
+      }
+      console.error("[SpeechRecognition] Error:", event.error);
+    };
+
+    recognition.onend = () => {
+      // Auto-restart if we're still supposed to be recording
+      if (recognitionRef.current === recognition) {
+        try {
+          recognition.start();
+        } catch {
+          // Already started or disposed
+        }
+      }
+    };
+
+    recognition.start();
+    recognitionRef.current = recognition;
+  };
+
+  const stopRecognition = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // Already stopped
+      }
+      recognitionRef.current = null;
+    }
+    setInterimText("");
+  };
+
+  // Handle recording state transitions
+  const handleStartRecording = () => {
+    if (speechNotSupported) return;
+    // Reset segment accumulator for a new segment
+    segmentTranscriptRef.current = "";
+    segmentEntriesRef.current = [];
+    setRecordingState("recording");
+    startRecognition();
+  };
+
+  const handlePauseRecording = () => {
+    setRecordingState("paused");
+    stopRecognition();
+  };
+
+  const handleResumeRecording = () => {
+    setRecordingState("recording");
+    startRecognition();
+  };
+
+  const handleStopRecording = async () => {
+    setRecordingState("stopping");
+    stopRecognition();
+
+    const rawTranscript = segmentTranscriptRef.current.trim();
+    const segments = [...segmentEntriesRef.current];
+
+    // Reset for next segment
+    segmentTranscriptRef.current = "";
+    segmentEntriesRef.current = [];
+
+    if (!rawTranscript || !spaceId) {
+      setRecordingState("idle");
+      return;
+    }
+
+    // Make ONE LLM call to process transcript into structured notes
+    try {
+      const res = await fetch("/api/generate/recording", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          spaceId,
+          rawTranscript,
+          transcriptSegments: segments,
+        }),
+      });
+
+      if (res.ok) {
+        const { lines: newLines } = await res.json();
+        // Append generated notes to the document
+        if (newLines && newLines.length > 0) {
+          setLines((prevLines) => {
+            const isEmptyOnly =
+              prevLines.length <= 2 &&
+              prevLines.every((l) => !l.text.trim() || l.text === "New Lecture Notes");
+            const generated: DocLine[] = newLines.map(
+              (nl: { type: string; text: string; tableData?: unknown }, idx: number) => ({
+                id: `gen-${Date.now()}-${idx}`,
+                text: nl.text,
+                type: nl.type as DocLine["type"],
+                tableData: nl.tableData,
+              })
+            );
+            const updated = isEmptyOnly ? generated : [...prevLines, ...generated];
+            setTimeout(() => commitLinesToHistory(updated), 50);
+            return updated;
+          });
+        }
+      } else {
+        console.error("[Recording] LLM call failed:", res.status);
+      }
+    } catch (err) {
+      console.error("[Recording] LLM call error:", err);
+    }
+
+    setRecordingState("idle");
+  };
+
+  // Cleanup recognition on unmount
+  useEffect(() => {
+    return () => {
+      stopRecognition();
+    };
+  }, []);
 
   // Scroll transcript container to bottom when text is appended
   useEffect(() => {
@@ -751,7 +852,7 @@ export function RecordingView({
   const handlePolishNotes = async () => {
     setIsPolishing(true);
     if (recordingState === "recording") {
-      setRecordingState("paused");
+      handlePauseRecording();
     }
 
     const rawText = lines.map((l) => l.text).join("\n");
@@ -770,22 +871,39 @@ export function RecordingView({
           type: text.startsWith("#") ? "h2" : "plain" as DocLine["type"],
         }));
         setIsPolishing(false);
-        updateLinesAndHistory(polishedLines.length > 0 ? polishedLines : POLISHED_LECTURE_NOTES);
+        if (polishedLines.length > 0) {
+          updateLinesAndHistory(polishedLines);
+        }
         return;
       } catch (err) {
         console.error("Polish failed:", err);
       }
     }
 
-    // Fallback
-    setTimeout(() => {
-      setIsPolishing(false);
-      updateLinesAndHistory(POLISHED_LECTURE_NOTES);
-    }, 1500);
+    setIsPolishing(false);
   };
 
   return (
     <div className="flex bg-[#0c0c0d] h-full w-full select-none text-left overflow-hidden relative">
+
+      {/* ── BROWSER SUPPORT CHECK ── */}
+      {speechNotSupported && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#0c0c0d] p-8 text-center">
+          <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-6">
+            <Mic size={28} className="text-red-400" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground mb-3">Browser Not Supported</h2>
+          <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
+            The Web Speech API is not available in your browser. Please switch to <strong className="text-foreground">Google Chrome</strong> or <strong className="text-foreground">Microsoft Edge</strong> to use the recording feature.
+          </p>
+          <button
+            onClick={onBack}
+            className="mt-8 px-6 py-2.5 bg-[#27272a] border border-border rounded-xl text-sm font-semibold text-foreground hover:bg-[#3f3f46] transition-colors cursor-pointer"
+          >
+            Go back
+          </button>
+        </div>
+      )}
 
       {/* ── SELECTION POPUP PORTAL ── */}
       {mounted && popupCoords && !showAskEspadaInput && (
@@ -1087,12 +1205,17 @@ export function RecordingView({
                     </button>
                   </div>
                   <div ref={transcriptContainerRef} className="flex-1 overflow-y-auto pr-1 text-xs text-muted-foreground leading-relaxed space-y-2 max-h-[220px] select-text">
-                    {liveTranscriptLines.length === 0 ? (
+                    {liveTranscriptLines.length === 0 && !interimText ? (
                       <p className="italic text-center py-6 text-muted-foreground/60">No transcript yet. Press Start Recording below.</p>
                     ) : (
-                      liveTranscriptLines.map((line, idx) => (
-                        <p key={idx} className="animate-fade-in">{line}</p>
-                      ))
+                      <>
+                        {liveTranscriptLines.map((line, idx) => (
+                          <p key={idx} className="animate-fade-in">{line}</p>
+                        ))}
+                        {interimText && (
+                          <p className="text-muted-foreground/50 italic animate-pulse">{interimText}</p>
+                        )}
+                      </>
                     )}
                   </div>
                 </motion.div>
@@ -1102,10 +1225,10 @@ export function RecordingView({
 
           <div className="h-4 w-[1px] bg-border/50 mx-0.5" />
 
-          {/* Recording Control cycle: idle -> recording -> paused */}
+          {/* Recording Control cycle: idle -> recording -> paused -> stopped */}
           {recordingState === "idle" && (
             <button
-              onClick={() => setRecordingState("recording")}
+              onClick={handleStartRecording}
               className="flex items-center gap-1.5 bg-[#27272a] hover:bg-[#3f3f46] text-foreground px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-colors cursor-pointer border border-border/50"
             >
               <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444] shrink-0 ring-2 ring-[#ef4444]/30" />
@@ -1114,23 +1237,48 @@ export function RecordingView({
           )}
 
           {recordingState === "recording" && (
-            <button
-              onClick={() => setRecordingState("paused")}
-              className="flex items-center gap-1.5 bg-[#27272a] hover:bg-[#3f3f46] text-foreground px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-colors cursor-pointer border border-border/50"
-            >
-              <span className="w-2.5 h-2.5 rounded-sm bg-foreground shrink-0" />
-              <span>Stop</span>
-            </button>
+            <>
+              <button
+                onClick={handlePauseRecording}
+                className="flex items-center gap-1.5 bg-[#27272a] hover:bg-[#3f3f46] text-foreground px-3 py-1.5 rounded-full text-[12px] font-semibold transition-colors cursor-pointer border border-border/50"
+              >
+                <Pause size={12} />
+                <span>Pause</span>
+              </button>
+              <button
+                onClick={handleStopRecording}
+                className="flex items-center gap-1.5 bg-[#ef4444]/20 hover:bg-[#ef4444]/30 text-[#ef4444] px-3 py-1.5 rounded-full text-[12px] font-semibold transition-colors cursor-pointer border border-[#ef4444]/30"
+              >
+                <Square size={10} />
+                <span>Stop</span>
+              </button>
+            </>
           )}
 
           {recordingState === "paused" && (
-            <button
-              onClick={() => setRecordingState("recording")}
-              className="flex items-center gap-1.5 bg-[#27272a] hover:bg-[#3f3f46] text-foreground px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-colors cursor-pointer border border-border/50"
-            >
-              <span className="w-2.5 h-2.5 rounded-full bg-foreground shrink-0 ring-2 ring-foreground/20" />
-              <span>Resume</span>
-            </button>
+            <>
+              <button
+                onClick={handleResumeRecording}
+                className="flex items-center gap-1.5 bg-[#27272a] hover:bg-[#3f3f46] text-foreground px-3 py-1.5 rounded-full text-[12px] font-semibold transition-colors cursor-pointer border border-border/50"
+              >
+                <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444] shrink-0 ring-2 ring-[#ef4444]/30" />
+                <span>Resume</span>
+              </button>
+              <button
+                onClick={handleStopRecording}
+                className="flex items-center gap-1.5 bg-[#ef4444]/20 hover:bg-[#ef4444]/30 text-[#ef4444] px-3 py-1.5 rounded-full text-[12px] font-semibold transition-colors cursor-pointer border border-[#ef4444]/30"
+              >
+                <Square size={10} />
+                <span>Stop</span>
+              </button>
+            </>
+          )}
+
+          {recordingState === "stopping" && (
+            <div className="flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-semibold text-muted-foreground">
+              <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />
+              <span>Processing...</span>
+            </div>
           )}
 
           {/* Polish Notes Button */}
