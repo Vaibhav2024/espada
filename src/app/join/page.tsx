@@ -1,12 +1,12 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback } from "react";
+import { Suspense, useRef, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { joinFolderByCode } from "@/lib/api";
 
-export default function JoinPage() {
+function JoinContent() {
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -128,5 +128,19 @@ export default function JoinPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function JoinPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <div className="w-6 h-6 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <JoinContent />
+    </Suspense>
   );
 }

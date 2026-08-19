@@ -1,15 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 
-/**
- * /invite?u=CODE — Invite landing page.
- * If the user is already signed in, show them a message.
- * If not signed in, redirect to sign-up with the referral code preserved.
- */
-export default function InvitePage() {
+function InviteContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { isSignedIn, isLoaded } = useAuth();
@@ -35,5 +30,19 @@ export default function InvitePage() {
         {referralCode ? "Redirecting you to sign up..." : "Invalid invite link"}
       </p>
     </div>
+  );
+}
+
+export default function InvitePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen flex-col items-center justify-center bg-background px-5 text-center">
+          <div className="w-8 h-8 border-4 border-foreground border-t-transparent rounded-full animate-spin mb-4" />
+        </div>
+      }
+    >
+      <InviteContent />
+    </Suspense>
   );
 }

@@ -1,9 +1,8 @@
 # ---- Dependencies ----
 FROM node:20-alpine AS deps
 WORKDIR /app
-COPY package.json bun.lock ./
-RUN corepack enable && corepack prepare pnpm@latest --activate && pnpm install --frozen-lockfile || \
-    npm ci
+COPY package.json bun.lock* package-lock.json* ./
+RUN npm install -g bun && bun install --frozen-lockfile
 
 # ---- Build ----
 FROM node:20-alpine AS builder
