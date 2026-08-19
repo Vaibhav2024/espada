@@ -2,7 +2,8 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { generateFlashcards, fetchKnowledgeItems, addSpaceResource, fetchFlashcards } from "@/lib/api";
+import { generateFlashcards, fetchKnowledgeItems, addSpaceResource, fetchFlashcards, uploadKnowledge, addKnowledgeLink, pollAssetStatus } from "@/lib/api";
+import { ACCEPTED_FILE_TYPES } from "@/hooks/useResourceUpload";
 import {
   Layers, ChevronRight, X, Play, Sparkles, Pencil, Trash2, Check, Plus, Folder, Globe,
   GripVertical, FileText, Link2, FileUp, FolderHeart, ChevronDown, User, Users, RotateCcw,
@@ -75,6 +76,7 @@ export function FlashcardsView({
   // AI Generator Modal State
   const [showWizard, setShowWizard] = useState(!initialConfigured);
   const [resources, setResources] = useState<Resource[]>([]);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
@@ -136,25 +138,50 @@ export function FlashcardsView({
     const id = `res-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
     const newRes: Resource = { id, name, loading: true };
     setResources((prev) => [...prev, newRes]);
-    setTimeout(() => {
-      setResources((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, loading: false } : r))
-      );
-    }, 2000);
+    return id;
   };
 
-  const handleAddLink = () => {
-    if (linkUrl.trim()) {
-      addResourceItem(`Link: ${linkUrl.trim()}`);
-      setLinkUrl("");
-      setShowLinkInput(false);
+  const handleAddLink = async () => {
+    if (!linkUrl.trim() || !folderId) return;
+    const rawUrl = linkUrl.trim().startsWith("http") ? linkUrl.trim() : `https://${linkUrl.trim()}`;
+    const resId = addResourceItem(`Link: ${rawUrl.slice(0, 30)}`);
+    setLinkUrl("");
+    setShowLinkInput(false);
+
+    try {
+      const item = await addKnowledgeLink(folderId, rawUrl);
+      setSelectedAssetIds((prev) => [...prev, item.assetId]);
+      await pollAssetStatus(item.assetId, (status) => {
+        if (status === "ready" || status === "failed") {
+          setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
+        }
+      });
+    } catch {
+      setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      Array.from(e.target.files).forEach((file) => addResourceItem(file.name));
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0 || !folderId) return;
+
+    for (const file of Array.from(e.target.files)) {
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      if (!ext || !["pdf", "pptx", "docx", "txt", "md"].includes(ext)) continue;
+
+      const resId = addResourceItem(file.name);
+      try {
+        const item = await uploadKnowledge(folderId, file);
+        setSelectedAssetIds((prev) => [...prev, item.assetId]);
+        await pollAssetStatus(item.assetId, (status) => {
+          if (status === "ready" || status === "failed") {
+            setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
+          }
+        });
+      } catch {
+        setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
+      }
     }
+    if (e.target) e.target.value = "";
   };
 
   const handleGenerate = async () => {
@@ -168,6 +195,7 @@ export function FlashcardsView({
           folderId,
           count,
           topic: topic || undefined,
+          assetIds: selectedAssetIds.length > 0 ? selectedAssetIds : undefined,
         });
         setCards(result.map((c) => ({ id: c.id, front: c.front, back: c.back })));
         setGenerating(false);
@@ -747,13 +775,14 @@ export function FlashcardsView({
           });
           setKnowledgeOpen(false);
 
-          // Link existing knowledge assets to this space (no re-embedding)
+          // Link existing knowledge assets to this space and capture asset IDs
           if (spaceId && folderId) {
             try {
               const items = await fetchKnowledgeItems(folderId);
               for (const fileName of fileNames) {
                 const match = items.find((item) => item.asset.name === fileName);
                 if (match) {
+                  setSelectedAssetIds((prev) => [...prev, match.assetId]);
                   await addSpaceResource(spaceId, match.assetId);
                 }
               }
@@ -771,6 +800,7 @@ export function FlashcardsView({
         onChange={handleFileSelect}
         multiple
         className="hidden"
+        accept={ACCEPTED_FILE_TYPES}
       />
     </div>
   );

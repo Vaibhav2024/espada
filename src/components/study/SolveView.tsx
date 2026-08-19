@@ -1,7 +1,8 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { generateSolve, streamChat, readStream } from "@/lib/api";
+import { generateSolve, streamChat, readStream, uploadKnowledge, addKnowledgeLink, pollAssetStatus } from "@/lib/api";
+import { ACCEPTED_FILE_TYPES } from "@/hooks/useResourceUpload";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Folder,
@@ -263,9 +264,7 @@ export function SolveView({
   const addResourceItem = (name: string) => {
     const newId = `res-${Date.now()}`;
     setResources((prev) => [...prev, { id: newId, name, loading: true }]);
-    setTimeout(() => {
-      setResources((prev) => prev.map((r) => (r.id === newId ? { ...r, loading: false } : r)));
-    }, 2000);
+    return newId;
   };
 
   const addChatResourceItem = (name: string) => {
@@ -283,25 +282,53 @@ export function SolveView({
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      Array.from(e.target.files).forEach((file) => addResourceItem(file.name));
-      setAddMenuOpen(false);
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0 || !folderId) return;
+    setAddMenuOpen(false);
+
+    for (const file of Array.from(e.target.files)) {
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      if (!ext || !["pdf", "pptx", "docx", "txt", "md"].includes(ext)) continue;
+
+      const resId = addResourceItem(file.name);
+      try {
+        const item = await uploadKnowledge(folderId, file);
+        await pollAssetStatus(item.assetId, (status) => {
+          if (status === "ready" || status === "failed") {
+            setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
+          }
+        });
+      } catch {
+        setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
+      }
     }
+    if (e.target) e.target.value = "";
   };
 
-  const handleAddLink = () => {
-    if (linkUrl.trim()) {
-      let label = linkUrl.trim();
-      try {
-        const url = new URL(label.startsWith("http") ? label : `https://${label}`);
-        label = url.hostname + url.pathname;
-        if (label.length > 25) label = label.slice(0, 25) + "...";
-      } catch (e) {}
-      addResourceItem(`Link: ${label}`);
-      setLinkUrl("");
-      setShowLinkInput(false);
-      setAddMenuOpen(false);
+  const handleAddLink = async () => {
+    if (!linkUrl.trim() || !folderId) return;
+    const rawUrl = linkUrl.trim().startsWith("http") ? linkUrl.trim() : `https://${linkUrl.trim()}`;
+    let label = rawUrl;
+    try {
+      const parsed = new URL(rawUrl);
+      label = parsed.hostname + parsed.pathname;
+      if (label.length > 25) label = label.slice(0, 25) + "...";
+    } catch {}
+
+    const resId = addResourceItem(`Link: ${label}`);
+    setLinkUrl("");
+    setShowLinkInput(false);
+    setAddMenuOpen(false);
+
+    try {
+      const item = await addKnowledgeLink(folderId, rawUrl, label);
+      await pollAssetStatus(item.assetId, (status) => {
+        if (status === "ready" || status === "failed") {
+          setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
+        }
+      });
+    } catch {
+      setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
     }
   };
 
@@ -726,7 +753,7 @@ export function SolveView({
             setKnowledgeOpen(false);
           }}
         />
-        <input type="file" ref={fileInputRef} onChange={handleFileSelect} multiple className="hidden" />
+        <input type="file" ref={fileInputRef} onChange={handleFileSelect} multiple className="hidden" accept={ACCEPTED_FILE_TYPES} />
       </div>
     );
   }

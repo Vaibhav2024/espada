@@ -43,8 +43,8 @@ export async function POST(req: NextRequest) {
     context = await getSpaceContext(spaceId);
   }
 
-  // Priority 3: Fall back to folder's knowledge items
-  if (!context && folderId) {
+  // Priority 3: Fall back to folder's knowledge items (only if no explicit assetIds were provided)
+  if (!context && folderId && (!assetIds || assetIds.length === 0)) {
     const realFolderId = await resolveFolder(folderId, userId);
     context = await getFolderContext(realFolderId);
   }

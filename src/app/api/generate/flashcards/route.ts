@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { spaceId, folderId, count = 10, topic } = await req.json();
+  const { spaceId, folderId, count = 10, topic, assetIds } = await req.json();
   if (!spaceId) {
     return NextResponse.json({ error: "spaceId is required" }, { status: 400 });
   }
@@ -34,9 +34,20 @@ export async function POST(req: NextRequest) {
   // Cap at 100 flashcards
   const cardCount = Math.min(Number(count) || 10, 100);
 
-  // Get context from space resources first, then fall back to folder knowledge
-  let context = await getSpaceContext(spaceId);
-  if (!context && folderId) {
+  let context = "";
+
+  // Priority 1: Use explicit asset IDs if provided
+  if (assetIds && assetIds.length > 0) {
+    context = await getAssetContext(assetIds);
+  }
+
+  // Priority 2: Try space resources
+  if (!context) {
+    context = await getSpaceContext(spaceId);
+  }
+
+  // Priority 3: Fallback to folder knowledge (only if no explicit assetIds)
+  if (!context && folderId && (!assetIds || assetIds.length === 0)) {
     const realFolderId = await resolveFolder(folderId, userId);
     context = await getFolderContext(realFolderId);
   }
@@ -103,6 +114,18 @@ Rules:
     .returning();
 
   return NextResponse.json(inserted, { status: 201 });
+}
+
+async function getAssetContext(assetIds: string[]): Promise<string> {
+  if (assetIds.length === 0) return "";
+
+  const chunks = await db
+    .select({ content: assetChunks.content })
+    .from(assetChunks)
+    .where(inArray(assetChunks.assetId, assetIds))
+    .limit(20);
+
+  return chunks.map((c) => c.content).join("\n\n");
 }
 
 async function getSpaceContext(spaceId: string): Promise<string> {

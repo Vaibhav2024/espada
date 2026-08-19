@@ -302,6 +302,7 @@ export async function generateFlashcards(data: {
   folderId?: string;
   count?: number;
   topic?: string;
+  assetIds?: string[];
 }): Promise<FlashcardData[]> {
   const res = await fetch("/api/generate/flashcards", {
     method: "POST",
@@ -345,6 +346,7 @@ export async function generateStudyGuide(data: {
   spaceId: string;
   topic?: string;
   folderId?: string;
+  assetIds?: string[];
 }): Promise<DocLineData[]> {
   const res = await fetch("/api/generate/study-guide", {
     method: "POST",

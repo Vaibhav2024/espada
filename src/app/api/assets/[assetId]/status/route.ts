@@ -9,14 +9,14 @@ interface RouteParams {
 }
 
 /**
- * GET /api/assets/:assetId/status — Check processing status of an asset.
+ * GET /api/assets/:assetId/status — Poll the processing status of an asset.
  */
 export async function GET(_req: NextRequest, { params }: RouteParams) {
   await requireAuth();
   const { assetId } = await params;
 
   const [asset] = await db
-    .select({ status: assets.status, name: assets.name })
+    .select({ status: assets.status })
     .from(assets)
     .where(eq(assets.id, assetId))
     .limit(1);
@@ -25,5 +25,5 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Asset not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ status: asset.status, name: asset.name });
+  return NextResponse.json({ status: asset.status });
 }

@@ -58,6 +58,8 @@
     "input-otp": "^1.4.2",
     "ioredis": "^6.0.0",
     "lucide-react": "^1.31.0",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.12.1",
     "nanoid": "^6.0.1",
     "next": "^15.3.3",
     "openssl": "^2.0.0",
@@ -76,6 +78,7 @@
     "tailwindcss": "^4.2.1",
     "tw-animate-css": "^1.3.4",
     "vaul": "^1.1.2",
+    "youtube-transcript": "^1.3.1",
     "zod": "^3.24.2"
   },
   "devDependencies": {

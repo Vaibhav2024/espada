@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { streamNotes, readStream, streamChat, fetchDocLines, saveDocLines } from "@/lib/api";
+import { streamNotes, readStream, streamChat, fetchDocLines, saveDocLines, uploadKnowledge, addKnowledgeLink, pollAssetStatus } from "@/lib/api";
+import { ACCEPTED_FILE_TYPES } from "@/hooks/useResourceUpload";
 import {
   Folder,
   ChevronRight,
@@ -96,41 +97,69 @@ export function NotesEditor({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const addResourceItem = (name: string) => {
+  const addResourceItem = (name: string, assetId?: string) => {
     const newId = `res-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
-    const newRes: Resource = { id: newId, name, loading: true };
+    const newRes: Resource = { id: newId, name, loading: !assetId };
     setResources((prev) => [...prev, newRes]);
-    
-    // 3 second embedding simulator
-    setTimeout(() => {
-      setResources((prev) =>
-        prev.map((r) => (r.id === newId ? { ...r, loading: false } : r))
-      );
-    }, 3000);
-  };
-
-  const handleAddLink = () => {
-    if (linkUrl.trim()) {
-      let label = linkUrl.trim();
-      try {
-        const url = new URL(label.startsWith("http") ? label : `https://${label}`);
-        label = url.hostname + url.pathname;
-        if (label.length > 30) label = label.slice(0, 30) + "...";
-      } catch (e) {}
-      addResourceItem(`Link: ${label}`);
-      setLinkUrl("");
-      setLinkOpen(false);
-      setAddMenuOpen(false);
+    if (assetId) {
+      setSelectedAssetIds((prev) => [...prev, assetId]);
     }
+    return newId;
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      Array.from(e.target.files).forEach((file) => {
-        addResourceItem(file.name);
+  const handleAddLink = async () => {
+    if (!linkUrl.trim() || !folderId) return;
+    const rawUrl = linkUrl.trim().startsWith("http") ? linkUrl.trim() : `https://${linkUrl.trim()}`;
+    let label = rawUrl;
+    try {
+      const parsed = new URL(rawUrl);
+      label = parsed.hostname + parsed.pathname;
+      if (label.length > 30) label = label.slice(0, 30) + "...";
+    } catch {}
+
+    const resId = addResourceItem(`Link: ${label}`);
+    setLinkUrl("");
+    setLinkOpen(false);
+    setAddMenuOpen(false);
+
+    try {
+      const item = await addKnowledgeLink(folderId, rawUrl, label);
+      setSelectedAssetIds((prev) => [...prev, item.assetId]);
+      // Poll until ready
+      await pollAssetStatus(item.assetId, (status) => {
+        if (status === "ready" || status === "failed") {
+          setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
+        }
       });
-      setAddMenuOpen(false);
+    } catch {
+      setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
     }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0 || !folderId) return;
+    setAddMenuOpen(false);
+
+    for (const file of Array.from(e.target.files)) {
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      if (!ext || !["pdf", "pptx", "docx", "txt", "md"].includes(ext)) continue;
+
+      const resId = addResourceItem(file.name);
+
+      try {
+        const item = await uploadKnowledge(folderId, file);
+        setSelectedAssetIds((prev) => [...prev, item.assetId]);
+        await pollAssetStatus(item.assetId, (status) => {
+          if (status === "ready" || status === "failed") {
+            setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
+          }
+        });
+      } catch {
+        setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
+      }
+    }
+    // Reset file input
+    if (e.target) e.target.value = "";
   };
 
   const handleSelectMultipleKnowledge = (fileNames: string[]) => {
@@ -274,6 +303,7 @@ export function NotesEditor({
               onChange={handleFileSelect}
               className="hidden"
               multiple
+              accept={ACCEPTED_FILE_TYPES}
             />
 
             {/* Link paste inline overlay */}

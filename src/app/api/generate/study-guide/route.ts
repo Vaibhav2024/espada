@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { spaceId, topic, folderId } = await req.json();
+  const { spaceId, topic, folderId, assetIds } = await req.json();
   if (!spaceId) {
     return NextResponse.json(
       { error: "spaceId is required" },
@@ -34,10 +34,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let context = await getSpaceContext(spaceId);
+  let context = "";
 
-  // Fallback: if no space resources found, try folder's knowledge items
-  if (!context && folderId) {
+  // Priority 1: Use explicit asset IDs if provided (user selected specific docs)
+  if (assetIds && assetIds.length > 0) {
+    context = await getAssetContext(assetIds);
+  }
+
+  // Priority 2: Try space resources
+  if (!context) {
+    context = await getSpaceContext(spaceId);
+  }
+
+  // Priority 3: Fallback to folder knowledge (only if no explicit selection)
+  if (!context && folderId && (!assetIds || assetIds.length === 0)) {
     const realFolderId = await resolveFolder(folderId, userId);
     context = await getFolderContext(realFolderId);
   }
@@ -106,6 +116,18 @@ Valid types: h1, h2, h3, bullet, number, quote, plain. Include at least 15-25 it
     .returning();
 
   return NextResponse.json(inserted, { status: 201 });
+}
+
+async function getAssetContext(assetIds: string[]): Promise<string> {
+  if (assetIds.length === 0) return "";
+
+  const chunks = await db
+    .select({ content: assetChunks.content })
+    .from(assetChunks)
+    .where(inArray(assetChunks.assetId, assetIds))
+    .limit(20);
+
+  return chunks.map((c) => c.content).join("\n\n");
 }
 
 async function getSpaceContext(spaceId: string): Promise<string> {

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { addSpaceResource, fetchKnowledgeItems, uploadAsset, generateStudyGuide } from "@/lib/api";
+import { addSpaceResource, fetchKnowledgeItems, uploadAsset, generateStudyGuide, uploadKnowledge, addKnowledgeLink, pollAssetStatus } from "@/lib/api";
+import { ACCEPTED_FILE_TYPES } from "@/hooks/useResourceUpload";
 import {
   Folder,
   ChevronRight,
@@ -44,6 +45,7 @@ export function StudyGuideEditor({
   initialText?: string;
 }) {
   const [resources, setResources] = useState<Resource[]>([]);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [importantTopics, setImportantTopics] = useState("");
   const [visibility, setVisibility] = useState<VisibilityType>("public");
   
@@ -78,39 +80,59 @@ export function StudyGuideEditor({
     const newId = `res-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
     const newRes: Resource = { id: newId, name, loading: !alreadyEmbedded };
     setResources((prev) => [...prev, newRes]);
-
-    if (!alreadyEmbedded) {
-      // For newly uploaded files, mark ready after a delay (real upload handles status separately)
-      setTimeout(() => {
-        setResources((prev) =>
-          prev.map((r) => (r.id === newId ? { ...r, loading: false } : r))
-        );
-      }, 3000);
-    }
+    return newId;
   };
 
-  const handleAddLink = () => {
-    if (linkUrl.trim()) {
-      let label = linkUrl.trim();
-      try {
-        const url = new URL(label.startsWith("http") ? label : `https://${label}`);
-        label = url.hostname + url.pathname;
-        if (label.length > 30) label = label.slice(0, 30) + "...";
-      } catch (e) {}
-      addResourceItem(`Link: ${label}`);
-      setLinkUrl("");
-      setLinkOpen(false);
-      setAddMenuOpen(false);
-    }
-  };
+  const handleAddLink = async () => {
+    if (!linkUrl.trim() || !folderId) return;
+    const rawUrl = linkUrl.trim().startsWith("http") ? linkUrl.trim() : `https://${linkUrl.trim()}`;
+    let label = rawUrl;
+    try {
+      const parsed = new URL(rawUrl);
+      label = parsed.hostname + parsed.pathname;
+      if (label.length > 30) label = label.slice(0, 30) + "...";
+    } catch {}
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      Array.from(e.target.files).forEach((file) => {
-        addResourceItem(file.name);
+    const resId = addResourceItem(`Link: ${label}`);
+    setLinkUrl("");
+    setLinkOpen(false);
+    setAddMenuOpen(false);
+
+    try {
+      const item = await addKnowledgeLink(folderId, rawUrl, label);
+      setSelectedAssetIds((prev) => [...prev, item.assetId]);
+      await pollAssetStatus(item.assetId, (status) => {
+        if (status === "ready" || status === "failed") {
+          setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
+        }
       });
-      setAddMenuOpen(false);
+    } catch {
+      setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
     }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0 || !folderId) return;
+    setAddMenuOpen(false);
+
+    for (const file of Array.from(e.target.files)) {
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      if (!ext || !["pdf", "pptx", "docx", "txt", "md"].includes(ext)) continue;
+
+      const resId = addResourceItem(file.name);
+      try {
+        const item = await uploadKnowledge(folderId, file);
+        setSelectedAssetIds((prev) => [...prev, item.assetId]);
+        await pollAssetStatus(item.assetId, (status) => {
+          if (status === "ready" || status === "failed") {
+            setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
+          }
+        });
+      } catch {
+        setResources((prev) => prev.map((r) => r.id === resId ? { ...r, loading: false } : r));
+      }
+    }
+    if (e.target) e.target.value = "";
   };
 
   const handleSelectMultipleKnowledge = async (fileNames: string[]) => {
@@ -120,13 +142,14 @@ export function StudyGuideEditor({
     });
     setAddMenuOpen(false);
 
-    // Link existing knowledge assets to this space (no re-embedding needed)
+    // Link existing knowledge assets to this space and capture asset IDs
     if (spaceId && folderId) {
       try {
         const items = await fetchKnowledgeItems(folderId);
         for (const fileName of fileNames) {
           const match = items.find((item) => item.asset.name === fileName);
           if (match) {
+            setSelectedAssetIds((prev) => [...prev, match.assetId]);
             await addSpaceResource(spaceId, match.assetId);
           }
         }
@@ -153,6 +176,7 @@ export function StudyGuideEditor({
           spaceId,
           topic: importantTopics || undefined,
           folderId: folderId || undefined,
+          assetIds: selectedAssetIds.length > 0 ? selectedAssetIds : undefined,
         });
         setGenerating(false);
         // Pass generated lines to parent so it transitions with content ready
@@ -266,6 +290,7 @@ export function StudyGuideEditor({
               onChange={handleFileSelect}
               className="hidden"
               multiple
+              accept={ACCEPTED_FILE_TYPES}
             />
 
             {/* Link paste inline overlay */}
