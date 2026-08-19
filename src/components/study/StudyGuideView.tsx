@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { fetchDocLines } from "@/lib/api";
+import { fetchDocLines, saveDocLines } from "@/lib/api";
 import {
   Folder,
   ChevronRight,
@@ -164,6 +164,7 @@ export function StudyGuideView({
   const [lineIndexMap, setLineIndexMap] = useState<Record<string, number>>({});
 
   // Update lines when generatedLines arrive from API (async)
+  const [contentLoaded, setContentLoaded] = useState(false);
   useEffect(() => {
     if (generatedLines && generatedLines.length > 0) {
       setLines(generatedLines.map((l) => ({
@@ -171,6 +172,7 @@ export function StudyGuideView({
         text: l.text,
         type: l.type as DocLine["type"],
       })));
+      setContentLoaded(true);
     } else if (spaceId && lines.length === 0) {
       // Load from DB on refresh (no generatedLines passed from parent)
       fetchDocLines(spaceId)
@@ -180,12 +182,34 @@ export function StudyGuideView({
               id: l.id,
               text: l.text,
               type: l.type as DocLine["type"],
+              tableData: l.tableData as DocLine["tableData"],
             })));
           }
+          setContentLoaded(true);
         })
-        .catch(() => {});
+        .catch(() => setContentLoaded(true));
+    } else {
+      setContentLoaded(true);
     }
   }, [generatedLines, spaceId]);
+
+  // Auto-save: debounced save to DB whenever lines change
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!spaceId || !contentLoaded || lines.length === 0) return;
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveDocLines(
+        spaceId,
+        lines.map((l) => ({ type: l.type, text: l.text, tableData: l.tableData }))
+      ).catch(() => {});
+    }, 1500);
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [lines, spaceId, contentLoaded]);
 
   // Split pane & Collapse state
   const containerRef = useRef<HTMLDivElement>(null);
@@ -561,8 +585,8 @@ export function StudyGuideView({
           const tableData = formatType === "table" ? {
             headers: ["Col 1", "Col 2"],
             rows: [
-              ["Value A", "Value B"],
-              ["Value C", "Value D"]
+              ["", ""],
+              ["", ""]
             ],
             style: "default" as const
           } : undefined;
@@ -943,8 +967,8 @@ function DocTableBlock({
   const tableData = line.tableData || {
     headers: ["Col 1", "Col 2"],
     rows: [
-      ["Value A", "Value B"],
-      ["Value C", "Value D"]
+      ["", ""],
+      ["", ""]
     ],
     style: "default" as const
   };
@@ -1207,22 +1231,21 @@ function DocTableBlock({
           <thead>
             <tr className="border-b border-border/40">
               {tableData.headers.map((header, colIndex) => (
-                <th
-                  key={`header-${colIndex}`}
+                <SGTableCellEditable
+                  key={`header-${line.id}-${colIndex}`}
+                  tag="th"
+                  value={header}
                   className={thClass}
                   style={{ width: colWidths[colIndex] || 180 }}
-                  contentEditable
-                  suppressContentEditableWarning
-                  onBlur={(e) => handleHeaderBlur(colIndex, e.currentTarget.innerText)}
+                  placeholder="Header"
+                  onSave={(val) => handleHeaderBlur(colIndex, val)}
                 >
-                  {header}
-                  {/* COLUMN RESIZER DRAG HANDLE */}
                   <div
                     onMouseDown={(e) => handleColResizeStart(e, colIndex)}
                     className="absolute right-0 top-0 w-1.5 h-full cursor-col-resize hover:bg-[#3b82f6]/40 transition-colors z-20"
                     title="Drag to resize column"
                   />
-                </th>
+                </SGTableCellEditable>
               ))}
             </tr>
           </thead>
@@ -1235,19 +1258,18 @@ function DocTableBlock({
                 style={{ height: rowHeights[rowIndex] || 42 }}
               >
                 {row.map((cell, colIndex) => (
-                  <td
-                    key={`cell-${rowIndex}-${colIndex}`}
+                  <SGTableCellEditable
+                    key={`cell-${line.id}-${rowIndex}-${colIndex}`}
+                    tag="td"
+                    value={cell}
                     className={tdClass}
                     style={{
                       width: colWidths[colIndex] || 180,
                       height: rowHeights[rowIndex] || 42,
                     }}
-                    contentEditable
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleCellBlur(rowIndex, colIndex, e.currentTarget.innerText)}
+                    placeholder="Type here..."
+                    onSave={(val) => handleCellBlur(rowIndex, colIndex, val)}
                   >
-                    {cell}
-                    {/* ROW RESIZER DRAG HANDLE */}
                     {colIndex === 0 && (
                       <div
                         onMouseDown={(e) => handleRowResizeStart(e, rowIndex)}
@@ -1255,7 +1277,7 @@ function DocTableBlock({
                         title="Drag to resize row"
                       />
                     )}
-                  </td>
+                  </SGTableCellEditable>
                 ))}
               </tr>
             ))}
@@ -1562,5 +1584,57 @@ function DocLineWrapper({
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+// ── TABLE CELL EDITABLE COMPONENT (StudyGuide) ──
+function SGTableCellEditable({
+  tag,
+  value,
+  className,
+  style,
+  placeholder,
+  onSave,
+  children,
+}: {
+  tag: "th" | "td";
+  value: string;
+  className: string;
+  style: React.CSSProperties;
+  placeholder?: string;
+  onSave: (val: string) => void;
+  children?: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (ref.current) {
+      const currentText = ref.current.innerText;
+      if (currentText !== value) {
+        ref.current.innerText = value;
+      }
+    }
+  }, [value]);
+
+  const handleBlur = () => {
+    if (ref.current) {
+      onSave(ref.current.innerText);
+    }
+  };
+
+  const Tag = tag;
+
+  return (
+    <Tag className={`${className} relative`} style={style}>
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onBlur={handleBlur}
+        className="w-full h-full outline-none"
+        data-placeholder={!value ? (placeholder || "") : ""}
+      />
+      {children}
+    </Tag>
   );
 }

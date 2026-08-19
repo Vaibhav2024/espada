@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { streamWrite, readStream } from "@/lib/api";
+import { streamWrite, streamChat, readStream, fetchDocLines, saveDocLines } from "@/lib/api";
 import {
   Folder,
   ChevronRight,
@@ -111,6 +111,7 @@ export function WriteView({
   const [perspectiveOpen, setPerspectiveOpen] = useState(false);
 
   const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   // Document lines state & undo/redo stacks
   const [lines, setLines] = useState<DocLine[]>([]);
@@ -137,6 +138,7 @@ export function WriteView({
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
   // Chat Resources & Focus States
@@ -235,41 +237,170 @@ export function WriteView({
 
   // Parse draft text block to structured DocLine blocks
   const parseTextToLines = (rawText: string): DocLine[] => {
-    const paragraphs = rawText.split("\n\n").filter(p => p.trim() !== "");
-    if (paragraphs.length === 0) {
-      return [{ id: `line-1`, text: "Untitled Draft", type: "h1" }];
-    }
-    
-    // Ensure first paragraph containing the title is rendered as an H1 block
-    return paragraphs.map((text, idx) => {
-      let cleanText = text.trim();
-      let type: DocLine["type"] = "plain";
+    // Split by single newlines to handle markdown line-by-line
+    const rawLines = rawText.split("\n");
+    const docLines: DocLine[] = [];
+    let currentParagraph = "";
 
-      if (idx === 0) {
-        type = "h1";
-        // Clean prefix labels if any
-        if (cleanText.startsWith("Draft on:")) {
-          cleanText = cleanText.replace("Draft on:", "").trim();
-        }
+    const flushParagraph = () => {
+      if (currentParagraph.trim()) {
+        docLines.push({
+          id: `line-init-${docLines.length}-${Date.now()}`,
+          text: stripInlineMarkdown(currentParagraph.trim()),
+          type: "plain",
+        });
+        currentParagraph = "";
+      }
+    };
+
+    for (const rawLine of rawLines) {
+      const trimmed = rawLine.trim();
+
+      // Empty line — flush current paragraph
+      if (trimmed === "") {
+        flushParagraph();
+        continue;
       }
 
-      return {
-        id: `line-init-${idx}-${Date.now()}`,
-        text: cleanText,
-        type
-      };
-    });
+      // Heading detection
+      if (trimmed.startsWith("### ")) {
+        flushParagraph();
+        docLines.push({
+          id: `line-init-${docLines.length}-${Date.now()}`,
+          text: stripInlineMarkdown(trimmed.slice(4)),
+          type: "h3",
+        });
+        continue;
+      }
+      if (trimmed.startsWith("## ")) {
+        flushParagraph();
+        docLines.push({
+          id: `line-init-${docLines.length}-${Date.now()}`,
+          text: stripInlineMarkdown(trimmed.slice(3)),
+          type: "h2",
+        });
+        continue;
+      }
+      if (trimmed.startsWith("# ")) {
+        flushParagraph();
+        docLines.push({
+          id: `line-init-${docLines.length}-${Date.now()}`,
+          text: stripInlineMarkdown(trimmed.slice(2)),
+          type: "h1",
+        });
+        continue;
+      }
+
+      // Bullet list detection
+      if (/^[-*]\s+/.test(trimmed)) {
+        flushParagraph();
+        docLines.push({
+          id: `line-init-${docLines.length}-${Date.now()}`,
+          text: stripInlineMarkdown(trimmed.replace(/^[-*]\s+/, "")),
+          type: "bullet",
+        });
+        continue;
+      }
+
+      // Numbered list detection
+      if (/^\d+[.)]\s+/.test(trimmed)) {
+        flushParagraph();
+        docLines.push({
+          id: `line-init-${docLines.length}-${Date.now()}`,
+          text: stripInlineMarkdown(trimmed.replace(/^\d+[.)]\s+/, "")),
+          type: "number",
+        });
+        continue;
+      }
+
+      // Blockquote detection
+      if (trimmed.startsWith("> ")) {
+        flushParagraph();
+        docLines.push({
+          id: `line-init-${docLines.length}-${Date.now()}`,
+          text: stripInlineMarkdown(trimmed.slice(2)),
+          type: "quote",
+        });
+        continue;
+      }
+
+      // Regular text — accumulate into a paragraph
+      currentParagraph += (currentParagraph ? " " : "") + trimmed;
+    }
+
+    // Flush remaining paragraph
+    flushParagraph();
+
+    if (docLines.length === 0) {
+      return [{ id: `line-1`, text: "Untitled Draft", type: "h1" }];
+    }
+
+    return docLines;
   };
 
-  // Sync initial draft prop if updated
+  // Strip inline markdown formatting (bold, italic, strikethrough, code)
+  const stripInlineMarkdown = (text: string): string => {
+    return text
+      .replace(/\*\*\*(.*?)\*\*\*/g, "$1")   // bold+italic ***text***
+      .replace(/\*\*(.*?)\*\*/g, "$1")         // bold **text**
+      .replace(/__(.*?)__/g, "$1")             // bold __text__
+      .replace(/\*(.*?)\*/g, "$1")             // italic *text*
+      .replace(/_(.*?)_/g, "$1")               // italic _text_
+      .replace(/~~(.*?)~~/g, "$1")             // strikethrough ~~text~~
+      .replace(/`(.*?)`/g, "$1")               // inline code `text`
+      .replace(/\[(.*?)\]\(.*?\)/g, "$1");     // links [text](url)
+  };
+
+  // Load content: from initialDraft prop OR from database on refresh
+  const [contentLoaded, setContentLoaded] = useState(false);
   useEffect(() => {
+    if (contentLoaded) return;
     if (initialDraft) {
       const parsed = parseTextToLines(initialDraft);
       setLines(parsed);
       setHistory([parsed]);
       setHistoryIndex(0);
+      setContentLoaded(true);
+    } else if (spaceId && isConfigured) {
+      // Load from DB on page refresh when initialDraft is empty
+      fetchDocLines(spaceId)
+        .then((dbLines) => {
+          if (dbLines.length > 0) {
+            const parsed = dbLines.map((l) => ({
+              id: l.id,
+              text: l.text,
+              type: l.type as DocLine["type"],
+              tableData: l.tableData as DocLine["tableData"],
+            }));
+            setLines(parsed);
+            setHistory([parsed]);
+            setHistoryIndex(0);
+          }
+          setContentLoaded(true);
+        })
+        .catch(() => setContentLoaded(true));
+    } else {
+      setContentLoaded(true);
     }
-  }, [initialDraft]);
+  }, [initialDraft, spaceId, isConfigured]);
+
+  // Auto-save: debounced save to DB whenever lines change
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!spaceId || !contentLoaded || lines.length === 0) return;
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveDocLines(
+        spaceId,
+        lines.map((l) => ({ type: l.type, text: l.text, tableData: l.tableData }))
+      ).catch(() => {});
+    }, 1500);
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [lines, spaceId, contentLoaded]);
 
   // Maintain line numeric indices for list rendering
   useEffect(() => {
@@ -397,6 +528,7 @@ export function WriteView({
   const handleGenerate = async () => {
     if (!promptText.trim()) return;
     setGenerating(true);
+    setGenerateError(null);
 
     if (spaceId) {
       try {
@@ -404,6 +536,11 @@ export function WriteView({
           spaceId,
           prompt: promptText.trim(),
           mode: "generate",
+          tone: tone || undefined,
+          length: lengthValue || undefined,
+          lengthUnit: lengthUnit || undefined,
+          tense: tense || undefined,
+          perspective: perspective || undefined,
         });
         let fullText = "";
         await readStream(response, (chunk) => {
@@ -420,23 +557,21 @@ export function WriteView({
           onCompleteConfig(promptText.trim().slice(0, 32), fullText);
         }
         return;
-      } catch (err) {
+      } catch (err: any) {
         console.error("Write generation failed:", err);
+        setGenerating(false);
+        setGenerateError(
+          err?.status === 429
+            ? "Daily AI limit reached. Please try again later or upgrade your plan."
+            : "Failed to generate content. Please try again."
+        );
+        return;
       }
     }
 
-    // Fallback: simulated generation
-    setTimeout(() => {
-      const generatedText = `Understanding the RAS Systems\n\nAs I delve into the intricacies of the Renin-Angiotensin System (RAS), I find it essential to comprehend its role in regulating blood pressure and fluid balance in the human body.`;
-      setGenerating(false);
-      const parsed = parseTextToLines(generatedText);
-      setLines(parsed);
-      setHistory([parsed]);
-      setHistoryIndex(0);
-      if (onCompleteConfig) {
-        onCompleteConfig(promptText.trim().slice(0, 32) || "Draft", generatedText);
-      }
-    }, 2500);
+    // Fallback: no spaceId available — show error
+    setGenerating(false);
+    setGenerateError("Unable to generate content. Space is not properly configured. Please go back and try again.");
   };
 
   // Continue Writing with AI Action
@@ -594,24 +729,57 @@ export function WriteView({
   };
 
   // Chat Actions
-  const handleSendChat = () => {
-    if (!chatInput.trim()) return;
+  const handleSendChat = async () => {
+    if (!chatInput.trim() || chatLoading) return;
     const newMsg: ChatMessage = {
       id: `chat-${Date.now()}`,
       sender: "user",
       text: chatInput,
     };
     setChatMessages((prev) => [...prev, newMsg]);
+    const messageText = chatInput.trim();
     setChatInput("");
+    setChatLoading(true);
 
-    setTimeout(() => {
-      const response: ChatMessage = {
-        id: `chat-${Date.now() + 1}`,
-        sender: "ai",
-        text: `Based on your request "${newMsg.text}" and the referenced sources, I recommend adjusting the second paragraph to emphasize structural efficiency. Let me know if you would like me to rewrite it for you.`,
-      };
-      setChatMessages((prev) => [...prev, response]);
-    }, 1500);
+    // Create placeholder AI message for streaming
+    const aiMsgId = `chat-${Date.now() + 1}`;
+    const aiMsg: ChatMessage = { id: aiMsgId, sender: "ai", text: "" };
+    setChatMessages((prev) => [...prev, aiMsg]);
+
+    if (spaceId) {
+      try {
+        // Include the current document content as context
+        const docContent = lines.map((l) => l.text).join("\n");
+        const contextPrefix = docContent.trim()
+          ? `[Context: The student is working on a written document with this content:\n"${docContent.slice(0, 2000)}"]\n\n`
+          : "";
+
+        const response = await streamChat({
+          spaceId,
+          message: contextPrefix + messageText,
+        });
+        await readStream(response, (chunk) => {
+          setChatMessages((prev) =>
+            prev.map((m) => (m.id === aiMsgId ? { ...m, text: m.text + chunk } : m))
+          );
+        });
+      } catch (err: any) {
+        console.error("Chat error:", err);
+        const errorText = err?.status === 429
+          ? "Daily AI limit reached. Please try again later or upgrade your plan."
+          : "Sorry, I couldn't process your request. Please try again.";
+        setChatMessages((prev) =>
+          prev.map((m) => (m.id === aiMsgId ? { ...m, text: errorText } : m))
+        );
+      } finally {
+        setChatLoading(false);
+      }
+    } else {
+      setChatMessages((prev) =>
+        prev.map((m) => (m.id === aiMsgId ? { ...m, text: "Please generate content first to enable chat." } : m))
+      );
+      setChatLoading(false);
+    }
   };
 
   // Helper Labels
@@ -708,8 +876,8 @@ export function WriteView({
         const tableData = formatType === "table" ? {
           headers: ["Col 1", "Col 2"],
           rows: [
-            ["Value A", "Value B"],
-            ["Value C", "Value D"]
+            ["", ""],
+            ["", ""]
           ],
           style: "default" as const
         } : undefined;
@@ -993,9 +1161,20 @@ export function WriteView({
                   <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">Length</span>
                   <div className="flex gap-2">
                     <input
-                      type="text"
+                      type="number"
+                      min="1"
+                      max={lengthUnit === "words" ? 5000 : lengthUnit === "pages" ? 7 : 60}
                       value={lengthValue}
-                      onChange={(e) => setLengthValue(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const num = parseInt(val, 10);
+                        const max = lengthUnit === "words" ? 5000 : lengthUnit === "pages" ? 7 : 60;
+                        if (val === "" || (num >= 1 && num <= max)) {
+                          setLengthValue(val);
+                        } else if (num > max) {
+                          setLengthValue(String(max));
+                        }
+                      }}
                       className="w-[100px] rounded-xl bg-[#131315] border border-border px-3 py-2.5 text-xs text-foreground outline-none focus:border-border/80"
                     />
                     
@@ -1020,6 +1199,9 @@ export function WriteView({
                               <button
                                 key={u}
                                 onClick={() => {
+                                  const max = u === "words" ? 5000 : u === "pages" ? 7 : 60;
+                                  const current = parseInt(lengthValue, 10);
+                                  if (current > max) setLengthValue(String(max));
                                   setLengthUnit(u);
                                   setLengthUnitOpen(false);
                                 }}
@@ -1033,6 +1215,9 @@ export function WriteView({
                       </AnimatePresence>
                     </div>
                   </div>
+                  <p className="text-[9px] text-muted-foreground/60">
+                    Max: {lengthUnit === "words" ? "5,000 words" : lengthUnit === "pages" ? "7 pages" : "60 paragraphs"}
+                  </p>
                 </div>
 
                 {/* Tense Selector */}
@@ -1114,7 +1299,11 @@ export function WriteView({
               </div>
 
               {/* Action Buttons Row */}
-              <div className="mt-8 pt-4 border-t border-border/40 flex justify-end gap-2">
+              <div className="mt-8 pt-4 border-t border-border/40 flex flex-col items-end gap-2">
+                {generateError && (
+                  <p className="text-xs text-destructive font-medium w-full text-right">{generateError}</p>
+                )}
+                <div className="flex justify-end gap-2 w-full">
                 <button
                   onClick={onBack}
                   className="rounded-xl border border-border bg-transparent hover:bg-[#27272a] px-5 py-2 text-xs font-semibold text-foreground transition-all cursor-pointer"
@@ -1122,12 +1311,20 @@ export function WriteView({
                   Cancel
                 </button>
                 <button
-                  disabled={!promptText.trim()}
+                  disabled={!promptText.trim() || generating}
                   onClick={handleGenerate}
                   className="rounded-xl bg-foreground text-background disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 px-5 py-2 text-xs font-bold transition-all cursor-pointer"
                 >
-                  Generate
+                  {generating ? (
+                    <span className="flex items-center gap-2">
+                      <span className="size-3 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                      Generating...
+                    </span>
+                  ) : (
+                    "Generate"
+                  )}
                 </button>
+                </div>
               </div>
             </motion.div>
           </div>,
@@ -1379,7 +1576,15 @@ export function WriteView({
                       : "bg-[#1c1c1f] text-foreground/90 border border-border mr-auto"
                   }`}
                 >
-                  {msg.text}
+                  {msg.sender === "ai" && msg.text === "" ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className="size-2 rounded-full bg-muted-foreground/50 animate-pulse" />
+                      <span className="size-2 rounded-full bg-muted-foreground/50 animate-pulse [animation-delay:150ms]" />
+                      <span className="size-2 rounded-full bg-muted-foreground/50 animate-pulse [animation-delay:300ms]" />
+                    </span>
+                  ) : (
+                    msg.text
+                  )}
                 </div>
               ))
             )}
@@ -1572,7 +1777,7 @@ export function WriteView({
                 </div>
                 <button
                   onClick={handleSendChat}
-                  disabled={!chatInput.trim()}
+                  disabled={!chatInput.trim() || chatLoading}
                   className="p-1.5 rounded-lg bg-foreground text-background disabled:opacity-30 transition-opacity cursor-pointer"
                 >
                   <Send size={11} className="fill-current" />
@@ -2056,8 +2261,8 @@ function DocLineWrapper({
                   const defaultTableData = {
                     headers: ["Col 1", "Col 2"],
                     rows: [
-                      ["Value A", "Value B"],
-                      ["Value C", "Value D"]
+                      ["", ""],
+                      ["", ""]
                     ],
                     style: "default" as const
                   };
@@ -2137,8 +2342,8 @@ function DocTableBlock({
   const tableData = line.tableData || {
     headers: ["Col 1", "Col 2"],
     rows: [
-      ["Value A", "Value B"],
-      ["Value C", "Value D"]
+      ["", ""],
+      ["", ""]
     ],
     style: "default" as const
   };
@@ -2401,22 +2606,22 @@ function DocTableBlock({
           <thead>
             <tr className="border-b border-border/40">
               {tableData.headers.map((header, colIndex) => (
-                <th
-                  key={`header-${colIndex}`}
+                <TableCellEditable
+                  key={`header-${line.id}-${colIndex}`}
+                  tag="th"
+                  value={header}
                   className={thClass}
                   style={{ width: colWidths[colIndex] || 180 }}
-                  contentEditable
-                  suppressContentEditableWarning
-                  onBlur={(e) => handleHeaderBlur(colIndex, e.currentTarget.innerText)}
+                  placeholder="Header"
+                  onSave={(val) => handleHeaderBlur(colIndex, val)}
                 >
-                  {header}
                   {/* COLUMN RESIZER DRAG HANDLE */}
                   <div
                     onMouseDown={(e) => handleColResizeStart(e, colIndex)}
                     className="absolute right-0 top-0 w-1.5 h-full cursor-col-resize hover:bg-[#3b82f6]/40 transition-colors z-20"
                     title="Drag to resize column"
                   />
-                </th>
+                </TableCellEditable>
               ))}
             </tr>
           </thead>
@@ -2430,18 +2635,18 @@ function DocTableBlock({
                 style={{ height: rowHeights[rowIndex] || 42 }}
               >
                 {row.map((cell, colIndex) => (
-                  <td
-                    key={`cell-${rowIndex}-${colIndex}`}
+                  <TableCellEditable
+                    key={`cell-${line.id}-${rowIndex}-${colIndex}`}
+                    tag="td"
+                    value={cell}
                     className={tdClass}
                     style={{
                       width: colWidths[colIndex] || 180,
                       height: rowHeights[rowIndex] || 42,
                     }}
-                    contentEditable
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleCellBlur(rowIndex, colIndex, e.currentTarget.innerText)}
+                    placeholder="Type here..."
+                    onSave={(val) => handleCellBlur(rowIndex, colIndex, val)}
                   >
-                    {cell}
                     {/* ROW RESIZER DRAG HANDLE */}
                     {colIndex === 0 && (
                       <div
@@ -2450,7 +2655,7 @@ function DocTableBlock({
                         title="Drag to resize row"
                       />
                     )}
-                  </td>
+                  </TableCellEditable>
                 ))}
               </tr>
             ))}
@@ -2458,5 +2663,59 @@ function DocTableBlock({
         </table>
       </div>
     </div>
+  );
+}
+
+// ── TABLE CELL EDITABLE COMPONENT ──
+// Uses ref-based DOM sync (like DocLineWrapper) to prevent cursor jumping
+function TableCellEditable({
+  tag,
+  value,
+  className,
+  style,
+  placeholder,
+  onSave,
+  children,
+}: {
+  tag: "th" | "td";
+  value: string;
+  className: string;
+  style: React.CSSProperties;
+  placeholder?: string;
+  onSave: (val: string) => void;
+  children?: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Sync value into DOM only on mount or when value changes externally
+  useEffect(() => {
+    if (ref.current) {
+      const currentText = ref.current.innerText;
+      if (currentText !== value) {
+        ref.current.innerText = value;
+      }
+    }
+  }, [value]);
+
+  const handleBlur = () => {
+    if (ref.current) {
+      onSave(ref.current.innerText);
+    }
+  };
+
+  const Tag = tag;
+
+  return (
+    <Tag className={`${className} relative`} style={style}>
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onBlur={handleBlur}
+        className="w-full h-full outline-none"
+        data-placeholder={!value ? (placeholder || "") : ""}
+      />
+      {children}
+    </Tag>
   );
 }

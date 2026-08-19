@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { generateSolve, streamChat, readStream } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Folder,
@@ -55,6 +56,7 @@ interface ChatMessage {
 
 export function SolveView({
   spaceName,
+  spaceId,
   folderId,
   visibility: initialVisibility = "members",
   isConfigured = false,
@@ -63,6 +65,7 @@ export function SolveView({
   onBack,
 }: {
   spaceName: string;
+  spaceId?: string;
   folderId?: string;
   visibility?: "me" | "members" | "public";
   isConfigured?: boolean;
@@ -132,13 +135,19 @@ export function SolveView({
   // Problems database state
   const [problems, setProblems] = useState<SolveProblem[]>([]);
   const [activeProblemId, setActiveProblemId] = useState<string | null>(null);
+  const [solving, setSolving] = useState(false);
 
   // Popup overlay to add more problems
   const [showAddPopup, setShowAddPopup] = useState(false);
 
-  // Chat follow-up panel state
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  // Chat follow-up panel state (per-problem chat messages)
+  const [chatMessagesByProblem, setChatMessagesByProblem] = useState<Record<string, ChatMessage[]>>({});
   const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [solveError, setSolveError] = useState<string | null>(null);
+
+  // Derived: current problem's chat messages
+  const chatMessages = activeProblemId ? (chatMessagesByProblem[activeProblemId] || []) : [];
 
   const addMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -147,6 +156,52 @@ export function SolveView({
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Load existing problems from DB on mount
+  useEffect(() => {
+    if (spaceId && isConfigured && problems.length === 0) {
+      fetch(`/api/spaces/${spaceId}/problems`)
+        .then((res) => res.ok ? res.json() : [])
+        .then((data: any[]) => {
+          if (data.length > 0) {
+            const mapped = data.map((p) => ({
+              id: p.id,
+              title: p.title,
+              question: p.question,
+              answer: p.answer || "",
+              steps: (p.steps as string[]) || [],
+            }));
+            setProblems(mapped);
+            setActiveProblemId(mapped[0].id);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [spaceId]);
+
+  // Load chat history (load once when space is configured, assign to first problem)
+  const [chatHistoryLoaded, setChatHistoryLoaded] = useState(false);
+  useEffect(() => {
+    if (spaceId && isConfigured && activeProblemId && !chatHistoryLoaded) {
+      setChatHistoryLoaded(true);
+      fetch(`/api/spaces/${spaceId}/messages`)
+        .then((res) => res.ok ? res.json() : [])
+        .then((data: any[]) => {
+          if (data.length > 0) {
+            const mapped = data.map((m: any) => ({
+              id: m.id,
+              sender: m.sender,
+              text: m.text,
+            }));
+            setChatMessagesByProblem((prev) => ({
+              ...prev,
+              [activeProblemId]: mapped,
+            }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [spaceId, activeProblemId, chatHistoryLoaded]);
 
   // Click outside handlers
   useEffect(() => {
@@ -286,23 +341,44 @@ export function SolveView({
     }
   };
 
-  const handleSolveInitial = () => {
+  const handleSolveInitial = async () => {
     const isEnabled = activeTab === "upload" ? resources.length > 0 : problemText.trim().length > 0;
-    if (!isEnabled) return;
+    if (!isEnabled || !spaceId) return;
 
-    const sourceText = activeTab === "paste" ? problemText : "";
-    const newProb = solveProblemContent(sourceText, resources);
-    
-    setProblems([newProb]);
-    setActiveProblemId(newProb.id);
-    
-    // Clear inputs
-    setProblemText("");
-    setResources([]);
+    const sourceText = activeTab === "paste" ? problemText : resources.map(r => r.name).join(", ");
+    setSolving(true);
+    setSolveError(null);
 
-    // Complete config to dashboard
-    if (onCompleteConfig) {
-      onCompleteConfig(newProb.title);
+    try {
+      const result = await generateSolve({
+        spaceId,
+        question: sourceText,
+        title: sourceText.slice(0, 60),
+      });
+
+      const newProb: SolveProblem = {
+        id: result.id,
+        title: result.title,
+        question: result.question,
+        answer: result.answer || "",
+        steps: (result.steps as string[]) || [],
+      };
+
+      setProblems([newProb]);
+      setActiveProblemId(newProb.id);
+      setProblemText("");
+      setResources([]);
+      setSolving(false);
+
+      if (onCompleteConfig) {
+        onCompleteConfig(newProb.title);
+      }
+    } catch (err: any) {
+      console.error("Solve failed:", err);
+      setSolving(false);
+      setSolveError(err?.status === 429 
+        ? "Daily AI limit reached. Please try again later or upgrade your plan." 
+        : "Failed to solve the problem. Please try again.");
     }
   };
 
@@ -323,28 +399,49 @@ export function SolveView({
     }, 2000);
   };
 
-  const handleAddMoreProblemsSubmit = () => {
+  const handleAddMoreProblemsSubmit = async () => {
     const isEnabled = popupTab === "upload" ? popupResources.length > 0 : popupText.trim().length > 0;
-    if (!isEnabled) return;
+    if (!isEnabled || !spaceId) return;
 
-    const sourceText = popupTab === "paste" ? popupText : "";
-    const newProb = solveProblemContent(sourceText, popupResources);
-    
-    // Add prefix title based on current count
-    newProb.title = `Problem ${problems.length + 1}: ${newProb.title}`;
-    
-    setProblems((prev) => [...prev, newProb]);
-    setActiveProblemId(newProb.id);
+    const sourceText = popupTab === "paste" ? popupText : popupResources.map(r => r.name).join(", ");
+    setSolving(true);
+    setSolveError(null);
 
-    // Clear popup inputs & close
-    setPopupText("");
-    setPopupResources([]);
-    setPopupTab("upload");
-    setShowAddPopup(false);
+    try {
+      const result = await generateSolve({
+        spaceId,
+        question: sourceText,
+        title: sourceText.slice(0, 60),
+      });
+
+      const newProb: SolveProblem = {
+        id: result.id,
+        title: result.title || `Problem ${problems.length + 1}`,
+        question: result.question,
+        answer: result.answer || "",
+        steps: (result.steps as string[]) || [],
+      };
+
+      setProblems((prev) => [...prev, newProb]);
+      setActiveProblemId(newProb.id);
+      setPopupText("");
+      setPopupResources([]);
+      setPopupTab("upload");
+      setShowAddPopup(false);
+      setSolving(false);
+    } catch (err: any) {
+      console.error("Solve failed:", err);
+      setSolving(false);
+      setSolveError(err?.status === 429 
+        ? "Daily AI limit reached. Please try again later or upgrade your plan." 
+        : "Failed to solve the problem. Please try again.");
+    }
   };
 
-  const handleSendChat = () => {
-    if (!chatInput.trim()) return;
+  const handleSendChat = async () => {
+    if (!chatInput.trim() || chatLoading || !activeProblemId) return;
+
+    const currentProblemId = activeProblemId;
 
     const userMsg: ChatMessage = {
       id: `chat-${Date.now()}`,
@@ -352,17 +449,65 @@ export function SolveView({
       text: chatInput.trim()
     };
 
-    setChatMessages((prev) => [...prev, userMsg]);
+    setChatMessagesByProblem((prev) => ({
+      ...prev,
+      [currentProblemId]: [...(prev[currentProblemId] || []), userMsg],
+    }));
+    const messageText = chatInput.trim();
     setChatInput("");
+    setChatLoading(true);
 
-    setTimeout(() => {
-      const aiMsg: ChatMessage = {
-        id: `chat-${Date.now() + 1}`,
-        sender: "ai",
-        text: `Here is a follow-up calculation based on your prompt: Delta x = v_i t + 1/2 a t^2. Let me know if you would like me to detail any step further.`
-      };
-      setChatMessages((prev) => [...prev, aiMsg]);
-    }, 1200);
+    // Create placeholder AI message for streaming
+    const aiMsgId = `chat-${Date.now() + 1}`;
+    const aiMsg: ChatMessage = { id: aiMsgId, sender: "ai", text: "" };
+    setChatMessagesByProblem((prev) => ({
+      ...prev,
+      [currentProblemId]: [...(prev[currentProblemId] || []), aiMsg],
+    }));
+
+    if (spaceId) {
+      try {
+        // Include the active problem context in the message for better answers
+        const activeProblem = problems.find((p) => p.id === currentProblemId);
+        const contextPrefix = activeProblem
+          ? `[Context: The student is working on this problem: "${activeProblem.question}" with answer "${activeProblem.answer}"]\n\n`
+          : "";
+
+        const response = await streamChat({
+          spaceId,
+          message: contextPrefix + messageText,
+        });
+        await readStream(response, (chunk) => {
+          setChatMessagesByProblem((prev) => ({
+            ...prev,
+            [currentProblemId]: (prev[currentProblemId] || []).map((m) =>
+              m.id === aiMsgId ? { ...m, text: m.text + chunk } : m
+            ),
+          }));
+        });
+      } catch (err: any) {
+        console.error("Chat error:", err);
+        const errorText = err?.status === 429
+          ? "Daily AI limit reached. Please try again later or upgrade your plan."
+          : "Sorry, I couldn't process your request. Please try again.";
+        setChatMessagesByProblem((prev) => ({
+          ...prev,
+          [currentProblemId]: (prev[currentProblemId] || []).map((m) =>
+            m.id === aiMsgId ? { ...m, text: errorText } : m
+          ),
+        }));
+      } finally {
+        setChatLoading(false);
+      }
+    } else {
+      setChatMessagesByProblem((prev) => ({
+        ...prev,
+        [currentProblemId]: (prev[currentProblemId] || []).map((m) =>
+          m.id === aiMsgId ? { ...m, text: "Please solve a problem first to enable chat." } : m
+        ),
+      }));
+      setChatLoading(false);
+    }
   };
 
   // Flag sets if initial Solve setup button is clickable
@@ -549,13 +694,23 @@ export function SolveView({
             )}
 
             {/* Floating solve button on bottom right */}
-            <div className="mt-8 flex justify-end">
+            <div className="mt-8 flex flex-col items-end gap-2">
+              {solveError && (
+                <p className="text-xs text-destructive font-medium">{solveError}</p>
+              )}
               <button
-                disabled={!isInitialSolveEnabled}
+                disabled={!isInitialSolveEnabled || solving}
                 onClick={handleSolveInitial}
                 className="rounded-xl bg-foreground text-background px-6 py-2.5 text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 cursor-pointer"
               >
-                Solve
+                {solving ? (
+                  <span className="flex items-center gap-2">
+                    <span className="size-3.5 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                    Solving...
+                  </span>
+                ) : (
+                  "Solve"
+                )}
               </button>
             </div>
           </div>
@@ -802,7 +957,15 @@ export function SolveView({
                       : "bg-[#1c1c1f] text-foreground/90 border border-border mr-auto"
                   }`}
                 >
-                  {msg.text}
+                  {msg.sender === "ai" && msg.text === "" ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className="size-2 rounded-full bg-muted-foreground/50 animate-pulse" />
+                      <span className="size-2 rounded-full bg-muted-foreground/50 animate-pulse [animation-delay:150ms]" />
+                      <span className="size-2 rounded-full bg-muted-foreground/50 animate-pulse [animation-delay:300ms]" />
+                    </span>
+                  ) : (
+                    msg.text
+                  )}
                 </div>
               ))
             )}
@@ -995,7 +1158,7 @@ export function SolveView({
                 </div>
                 <button
                   onClick={handleSendChat}
-                  disabled={!chatInput.trim()}
+                  disabled={!chatInput.trim() || chatLoading}
                   className="p-1.5 rounded-lg bg-foreground text-background disabled:opacity-30 transition-opacity cursor-pointer"
                 >
                   <Send size={11} className="fill-current" />
@@ -1158,7 +1321,11 @@ export function SolveView({
             )}
 
             {/* Popup Action Buttons */}
-            <div className="border-t border-border/40 pt-3 mt-4 flex justify-end gap-2">
+            <div className="border-t border-border/40 pt-3 mt-4 flex flex-col items-end gap-2">
+              {solveError && (
+                <p className="text-xs text-destructive font-medium w-full text-right">{solveError}</p>
+              )}
+              <div className="flex justify-end gap-2 w-full">
               <button
                 onClick={() => setShowAddPopup(false)}
                 className="rounded-lg border border-border bg-transparent hover:bg-[#27272a] px-4 py-2 text-xs font-semibold text-foreground transition-all cursor-pointer"
@@ -1166,12 +1333,20 @@ export function SolveView({
                 Cancel
               </button>
               <button
-                disabled={popupTab === "upload" ? popupResources.length === 0 : !popupText.trim()}
+                disabled={solving || (popupTab === "upload" ? popupResources.length === 0 : !popupText.trim())}
                 onClick={handleAddMoreProblemsSubmit}
                 className="rounded-lg bg-foreground hover:opacity-90 px-4 py-2 text-xs font-semibold text-background transition-opacity disabled:opacity-40 cursor-pointer"
               >
-                Solve
+                {solving ? (
+                  <span className="flex items-center gap-2">
+                    <span className="size-3 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                    Solving...
+                  </span>
+                ) : (
+                  "Solve"
+                )}
               </button>
+              </div>
             </div>
           </div>
 

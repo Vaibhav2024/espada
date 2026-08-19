@@ -191,6 +191,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/api/generate/notes/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/generate/notes">> = Specific
+  const handler = {} as typeof import("../../src/app/api/generate/notes/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/api/generate/quiz/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/generate/quiz">> = Specific
@@ -245,6 +254,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/api/spaces/[spaceId]/flashcards/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/spaces/[spaceId]/flashcards">> = Specific
+  const handler = {} as typeof import("../../src/app/api/spaces/[spaceId]/flashcards/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/api/spaces/[spaceId]/lines/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/spaces/[spaceId]/lines">> = Specific
@@ -258,6 +276,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/spaces/[spaceId]/messages">> = Specific
   const handler = {} as typeof import("../../src/app/api/spaces/[spaceId]/messages/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/spaces/[spaceId]/problems/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/spaces/[spaceId]/problems">> = Specific
+  const handler = {} as typeof import("../../src/app/api/spaces/[spaceId]/problems/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check

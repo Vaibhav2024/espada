@@ -542,7 +542,14 @@ export default function Dashboard() {
     if (!activeFolderId || activeFolderId === "default") return;
     fetchSpaces(activeFolderId)
       .then((apiSpaces) => {
-        const mapped: Space[] = apiSpaces.map((s) => ({
+        // Filter out unconfigured spaces — they are abandoned drafts
+        const configuredSpaces = apiSpaces.filter((s) => s.isConfigured);
+        // Delete abandoned unconfigured spaces from DB
+        apiSpaces
+          .filter((s) => !s.isConfigured)
+          .forEach((s) => apiDeleteSpace(s.id).catch(() => {}));
+
+        const mapped: Space[] = configuredSpaces.map((s) => ({
           id: s.id,
           name: s.name,
           type: s.type,
@@ -604,6 +611,14 @@ export default function Dashboard() {
   // Spaces now persist in the DB and should always be shown
 
   const handleBackToHub = () => {
+    // If leaving an unconfigured space, delete it from DB (user didn't generate anything)
+    if (activeSpaceId) {
+      const space = spaces.find((s) => s.id === activeSpaceId);
+      if (space && !space.isConfigured) {
+        setSpaces((prev) => prev.filter((s) => s.id !== activeSpaceId));
+        apiDeleteSpace(activeSpaceId).catch(() => {});
+      }
+    }
     setActiveTool(null);
     setActiveSpaceId(null);
   };
@@ -805,6 +820,7 @@ export default function Dashboard() {
         mainContent = (
           <FlashcardsView
             spaceName={activeSpace.name}
+            spaceId={activeSpace.id}
             folderId={activeFolderId || undefined}
             visibility={activeSpace.visibility}
             isConfigured={false}
@@ -822,6 +838,7 @@ export default function Dashboard() {
         mainContent = (
           <SolveView
             spaceName={activeSpace.name}
+            spaceId={activeSpace.id}
             folderId={activeFolderId || undefined}
             visibility={activeSpace.visibility}
             isConfigured={false}
@@ -840,6 +857,7 @@ export default function Dashboard() {
         mainContent = (
           <WriteView
             spaceName={activeSpace.name}
+            spaceId={activeSpace.id}
             folderId={activeFolderId || undefined}
             visibility={activeSpace.visibility}
             isConfigured={false}
@@ -858,8 +876,9 @@ export default function Dashboard() {
         mainContent = (
           <NotesEditor
             spaceName={activeSpace.name}
+            spaceId={activeSpace.id}
             folderId={activeFolderId || undefined}
-            onGenerate={(visibility, resources, generatedName) => {
+            onGenerate={(visibility, resources, generatedName, generatedText) => {
               setSpaces((prev) =>
                 prev.map((s) =>
                   s.id === activeSpace.id
@@ -869,11 +888,13 @@ export default function Dashboard() {
                         visibility,
                         resources,
                         isConfigured: true,
+                        plainTextContent: generatedText || "",
                       }
                     : s
                 )
               );
               setFolderOpen(false);
+              if (activeSpace.id) apiUpdateSpace(activeSpace.id, { isConfigured: true }).catch(() => {});
             }}
           />
         );
@@ -916,6 +937,7 @@ export default function Dashboard() {
         mainContent = (
           <FlashcardsView
             spaceName={activeSpace.name}
+            spaceId={activeSpace.id}
             folderId={activeFolderId || undefined}
             visibility={activeSpace.visibility}
             isConfigured={true}
@@ -928,6 +950,7 @@ export default function Dashboard() {
         mainContent = (
           <SolveView
             spaceName={activeSpace.name}
+            spaceId={activeSpace.id}
             folderId={activeFolderId || undefined}
             visibility={activeSpace.visibility}
             isConfigured={true}
@@ -939,6 +962,7 @@ export default function Dashboard() {
         mainContent = (
           <WriteView
             spaceName={activeSpace.name}
+            spaceId={activeSpace.id}
             folderId={activeFolderId || undefined}
             visibility={activeSpace.visibility}
             isConfigured={true}
@@ -962,8 +986,10 @@ export default function Dashboard() {
         mainContent = (
           <NotesView
             spaceName={activeSpace.name}
+            spaceId={activeSpace.id}
             visibility={activeSpace.visibility || "public"}
             resources={activeSpace.resources || []}
+            initialDraft={activeSpace.plainTextContent}
             onBack={handleBackToHub}
             onUpdateVisibility={(vis) => {
               setSpaces((prev) =>
@@ -1105,6 +1131,14 @@ export default function Dashboard() {
               knowledgeCount={knowledgeItems.filter((k) => (k.folderId || "default") === activeFolderId).length}
               activeSpaceId={activeSpaceId}
               onSelectSpace={(id) => {
+                // Clean up previous unconfigured space if leaving it
+                if (activeSpaceId && activeSpaceId !== id) {
+                  const prevSpace = spaces.find((s) => s.id === activeSpaceId);
+                  if (prevSpace && !prevSpace.isConfigured) {
+                    setSpaces((prev) => prev.filter((s) => s.id !== activeSpaceId));
+                    apiDeleteSpace(activeSpaceId).catch(() => {});
+                  }
+                }
                 setActiveSpaceId(id);
                 setActiveTool(null);
                 const space = spaces.find((s) => s.id === id);

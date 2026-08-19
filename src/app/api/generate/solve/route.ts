@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { generateText } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { db } from "@/db";
 import { solveProblems } from "@/db/schema";
 import { requireAuth, getUserPlan } from "@/lib/auth";
 import { consumeQuota } from "@/lib/quota";
-import { generateTextWithFallback } from "@/lib/ai";
 import { eq } from "drizzle-orm";
+
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 /**
  * POST /api/generate/solve — Solve a problem step by step.
@@ -30,9 +33,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { text } = await generateTextWithFallback({
-    system: `You solve academic problems step by step. Output ONLY a JSON object with "answer" (final answer string) and "steps" (array of step strings). No markdown wrapping.`,
-    prompt: `Solve this problem step by step:\n\n${question}\n\nOutput: {"answer": "...", "steps": ["Step 1: ...", "Step 2: ...", ...]}`,
+  const { text } = await generateText({
+    model: openai("gpt-4o-mini"),
+    system: `You solve academic problems step by step. Output ONLY a valid JSON object. No markdown, no code fences.`,
+    prompt: `Solve this problem step by step:
+
+${question}
+
+Output format:
+{"answer": "the final answer (concise)", "steps": ["Step 1: detailed explanation...", "Step 2: detailed explanation...", ...]}
+
+Rules:
+- Provide 3-6 clear, detailed steps explaining the reasoning
+- Each step should be 1-3 sentences
+- The final answer should be concise (1 sentence or a number)
+- If the problem is conceptual, explain the concept in steps`,
   });
 
   let result: { answer: string; steps: string[] };

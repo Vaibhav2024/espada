@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { streamNotes, readStream, streamChat, fetchDocLines, saveDocLines } from "@/lib/api";
 import {
   Folder,
   ChevronRight,
@@ -50,77 +51,24 @@ export interface DocLine {
   };
 }
 
-const DEFAULT_NOTES_LINES: DocLine[] = [
-  {
-    id: "line-1",
-    text: "Notes on RAG and LLMs",
-    type: "h1",
-  },
-  {
-    id: "line-2",
-    text: "Understanding LLM Limitations",
-    type: "h2",
-  },
-  {
-    id: "line-3",
-    text: "Knowledge Cutoff: LLMs are limited to the data available up to a specific cutoff date, meaning they cannot provide information or insights beyond that point.",
-    type: "bullet",
-  },
-  {
-    id: "line-4",
-    text: "Hallucinations: LLMs may generate plausible-sounding but incorrect or misleading information when they lack specific facts in their training data.",
-    type: "bullet",
-  },
-  {
-    id: "line-5",
-    text: "Lack of Contextual and Proprietary Memory: LLMs do not retain information about specific projects or user histories unless explicitly provided in the prompt, leading to inefficient token usage and potential hallucinations due to context window limitations.",
-    type: "bullet",
-  },
-  {
-    id: "line-6",
-    text: "Inability to Access Private Data: Standalone LLMs cannot access or analyze private data, internal codebases, or business intelligence without manual input, which is cumbersome and limited by context window constraints.",
-    type: "bullet",
-  },
-  {
-    id: "line-7",
-    text: "Introduction to RAG",
-    type: "h2",
-  },
-  {
-    id: "line-8",
-    text: "Definition: Retrieval-Augmented Generation (RAG) is an architectural pattern that enhances LLM capabilities by allowing them to access external data sources (e.g., databases, local files, web searches) to provide more accurate answers.",
-    type: "bullet",
-  },
-  {
-    id: "line-9",
-    text: "Reasons for Introducing RAG",
-    type: "h2",
-  },
-  {
-    id: "line-10",
-    text: "Fine-Tuning Challenges:",
-    type: "number",
-  },
-  {
-    id: "line-11",
-    text: "Fine-tuning LLMs is resource-intensive, requiring significant computational power and expertise.",
-    type: "bullet",
-  }
-];
-
 // ==========================================
 // 1. NOTES EDITOR (WIZARD SETUP PAGE)
 // ==========================================
 export function NotesEditor({
   spaceName,
+  spaceId,
   folderId,
   onGenerate,
 }: {
   spaceName: string;
+  spaceId?: string;
   folderId?: string;
-  onGenerate: (visibility: VisibilityType, resources: Resource[], generatedName: string) => void;
+  onGenerate: (visibility: VisibilityType, resources: Resource[], generatedName: string, generatedText?: string) => void;
 }) {
   const [resources, setResources] = useState<Resource[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [visibility, setVisibility] = useState<VisibilityType>("public");
   
   // Modals & Menu States
@@ -192,19 +140,45 @@ export function NotesEditor({
     setAddMenuOpen(false);
   };
 
+  const handleSelectWithAssets = (items: { name: string; assetId: string }[]) => {
+    setSelectedAssetIds((prev) => [...prev, ...items.map((i) => i.assetId)]);
+  };
+
   const handleRemoveResource = (id: string) => {
     setResources((prev) => prev.filter((r) => r.id !== id));
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     const firstResName = resources[0]?.name || "";
     const baseName = firstResName.replace(/\.[^/.]+$/, "");
-    const generatedName = baseName ? `Notes on ${baseName}` : "Notes on RAG and LLMs";
-    onGenerate(visibility, resources, generatedName);
+    const generatedName = baseName ? `Notes on ${baseName}` : "Generated Notes";
+
+    if (spaceId) {
+      setGenerating(true);
+      setGenerateError(null);
+      try {
+        const response = await streamNotes({ spaceId, folderId, assetIds: selectedAssetIds });
+        let fullText = "";
+        await readStream(response, (chunk) => {
+          fullText += chunk;
+        });
+        setGenerating(false);
+        onGenerate(visibility, resources, generatedName, fullText);
+      } catch (err: any) {
+        setGenerating(false);
+        setGenerateError(
+          err?.status === 429
+            ? "Daily AI limit reached. Please try again later or upgrade your plan."
+            : "Failed to generate notes. Please try again."
+        );
+      }
+    } else {
+      onGenerate(visibility, resources, generatedName);
+    }
   };
 
   const isGenerateDisabled =
-    resources.length === 0 || resources.some((r) => r.loading);
+    resources.length === 0 || resources.some((r) => r.loading) || generating;
 
   const getVisibilityLabel = (vis: VisibilityType) => {
     if (vis === "public") return "Public";
@@ -480,12 +454,22 @@ export function NotesEditor({
           </div>
 
           {/* Generate Button */}
+          {generateError && (
+            <p className="text-xs text-destructive font-medium absolute bottom-full mb-2 right-0">{generateError}</p>
+          )}
           <button
             onClick={handleGenerate}
             disabled={isGenerateDisabled}
             className="rounded-xl bg-foreground px-6 py-2.5 text-xs font-semibold text-background hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer border-none outline-none"
           >
-            Generate notes
+            {generating ? (
+              <span className="flex items-center gap-2">
+                <span className="size-3 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                Generating...
+              </span>
+            ) : (
+              "Generate notes"
+            )}
           </button>
         </div>
       </div>
@@ -496,6 +480,7 @@ export function NotesEditor({
         onClose={() => setKnowledgeOpen(false)}
         folderId={folderId}
         onSelectMultiple={handleSelectMultipleKnowledge}
+        onSelectWithAssets={handleSelectWithAssets}
       />
     </div>
   );
@@ -506,35 +491,117 @@ export function NotesEditor({
 // ==========================================
 export function NotesView({
   spaceName = "Notes on RAG and LLMs",
+  spaceId,
   visibility: initialVisibility = "public",
   onBack,
   onUpdateVisibility,
   resources: initialResources = [],
+  initialDraft,
 }: {
   spaceName?: string;
+  spaceId?: string;
   visibility?: VisibilityType;
   onBack: () => void;
   onUpdateVisibility?: (vis: VisibilityType) => void;
   resources?: Resource[];
+  initialDraft?: string;
 }) {
   const [visibility, setVisibility] = useState<VisibilityType>(initialVisibility);
   const [visibilityOpen, setVisibilityOpen] = useState(false);
   const visibilityRef = useRef<HTMLDivElement>(null);
 
   // Document lines state
-  const [lines, setLines] = useState<DocLine[]>(() => {
-    if (initialResources && initialResources.length > 0) {
-      const isRAG = initialResources.some(
-        (r) =>
-          r.name.toLowerCase().includes("rag") || r.name.toLowerCase().includes("llm")
-      );
-      if (isRAG || spaceName.toLowerCase().includes("rag") || spaceName.toLowerCase().includes("llm")) {
-        return [];
+  const [lines, setLines] = useState<DocLine[]>([]);
+
+  // Parse text into structured doc lines (same as WriteView)
+  const parseTextToLines = (rawText: string): DocLine[] => {
+    const rawLines = rawText.split("\n");
+    const docLines: DocLine[] = [];
+    let currentParagraph = "";
+
+    const flushParagraph = () => {
+      if (currentParagraph.trim()) {
+        docLines.push({
+          id: `line-init-${docLines.length}-${Date.now()}`,
+          text: stripInlineMarkdown(currentParagraph.trim()),
+          type: "plain",
+        });
+        currentParagraph = "";
       }
-      return [];
+    };
+
+    for (const rawLine of rawLines) {
+      const trimmed = rawLine.trim();
+      if (trimmed === "") { flushParagraph(); continue; }
+      if (trimmed.startsWith("### ")) { flushParagraph(); docLines.push({ id: `line-init-${docLines.length}-${Date.now()}`, text: stripInlineMarkdown(trimmed.slice(4)), type: "h3" }); continue; }
+      if (trimmed.startsWith("## ")) { flushParagraph(); docLines.push({ id: `line-init-${docLines.length}-${Date.now()}`, text: stripInlineMarkdown(trimmed.slice(3)), type: "h2" }); continue; }
+      if (trimmed.startsWith("# ")) { flushParagraph(); docLines.push({ id: `line-init-${docLines.length}-${Date.now()}`, text: stripInlineMarkdown(trimmed.slice(2)), type: "h1" }); continue; }
+      if (/^[-*]\s+/.test(trimmed)) { flushParagraph(); docLines.push({ id: `line-init-${docLines.length}-${Date.now()}`, text: stripInlineMarkdown(trimmed.replace(/^[-*]\s+/, "")), type: "bullet" }); continue; }
+      if (/^\d+[.)]\s+/.test(trimmed)) { flushParagraph(); docLines.push({ id: `line-init-${docLines.length}-${Date.now()}`, text: stripInlineMarkdown(trimmed.replace(/^\d+[.)]\s+/, "")), type: "number" }); continue; }
+      if (trimmed.startsWith("> ")) { flushParagraph(); docLines.push({ id: `line-init-${docLines.length}-${Date.now()}`, text: stripInlineMarkdown(trimmed.slice(2)), type: "quote" }); continue; }
+      currentParagraph += (currentParagraph ? " " : "") + trimmed;
     }
-    return [];
-  });
+    flushParagraph();
+    if (docLines.length === 0) return [{ id: `line-1`, text: "", type: "plain" }];
+    return docLines;
+  };
+
+  const stripInlineMarkdown = (text: string): string => {
+    return text
+      .replace(/\*\*\*(.*?)\*\*\*/g, "$1")
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/__(.*?)__/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      .replace(/_(.*?)_/g, "$1")
+      .replace(/~~(.*?)~~/g, "$1")
+      .replace(/`(.*?)`/g, "$1")
+      .replace(/\[(.*?)\]\(.*?\)/g, "$1");
+  };
+
+  // Load content: from initialDraft prop OR from database on refresh
+  const [contentLoaded, setContentLoaded] = useState(false);
+  useEffect(() => {
+    if (contentLoaded) return;
+    if (initialDraft) {
+      const parsed = parseTextToLines(initialDraft);
+      setLines(parsed);
+      setContentLoaded(true);
+    } else if (spaceId) {
+      fetchDocLines(spaceId)
+        .then((dbLines) => {
+          if (dbLines.length > 0) {
+            setLines(dbLines.map((l) => ({
+              id: l.id,
+              text: l.text,
+              type: l.type as DocLine["type"],
+              tableData: l.tableData as DocLine["tableData"],
+            })));
+          }
+          setContentLoaded(true);
+        })
+        .catch(() => setContentLoaded(true));
+    } else {
+      setContentLoaded(true);
+    }
+  }, [initialDraft, spaceId]);
+
+  // Auto-save: debounced save to DB whenever lines change
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!spaceId || !contentLoaded || lines.length === 0) return;
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveDocLines(
+        spaceId,
+        lines.map((l) => ({ type: l.type, text: l.text, tableData: l.tableData }))
+      ).catch(() => {});
+    }, 1500);
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [lines, spaceId, contentLoaded]);
 
   const [activeSlashLineId, setActiveSlashLineId] = useState<string | null>(null);
   const [activeMenuLineId, setActiveMenuLineId] = useState<string | null>(null);
@@ -651,32 +718,7 @@ export function NotesView({
     },
     {
       id: `line-${Date.now()}-2`,
-      text: `This document represents the automatically generated notes for your resource: ${fileName}.`,
-      type: "plain",
-    },
-    {
-      id: `line-${Date.now()}-3`,
-      text: "Key Takeaways",
-      type: "h2",
-    },
-    {
-      id: `line-${Date.now()}-4`,
-      text: "Key Takeaway 1: Essential parameter or definition extracted from this source.",
-      type: "bullet",
-    },
-    {
-      id: `line-${Date.now()}-5`,
-      text: "Key Takeaway 2: Contextual details or supporting evidence.",
-      type: "bullet",
-    },
-    {
-      id: `line-${Date.now()}-6`,
-      text: "Summary of Findings",
-      type: "h2",
-    },
-    {
-      id: `line-${Date.now()}-7`,
-      text: "The resource provides a comprehensive view on its main subject, proposing several actionable recommendations.",
+      text: "",
       type: "plain",
     },
   ];
@@ -904,8 +946,8 @@ export function NotesView({
           const tableData = formatType === "table" ? {
             headers: ["Col 1", "Col 2"],
             rows: [
-              ["Value A", "Value B"],
-              ["Value C", "Value D"]
+              ["", ""],
+              ["", ""]
             ],
             style: "default" as const
           } : undefined;
@@ -1165,6 +1207,7 @@ export function NotesView({
           <div className="flex-1 min-h-0">
             <ChatView
               spaceName={spaceName}
+              spaceId={spaceId}
               resources={chatResources}
               focusedResourceIds={focusedResourceIds}
               onAddResource={handleAddResource}
@@ -1283,8 +1326,8 @@ function DocTableBlock({
   const tableData = line.tableData || {
     headers: ["Col 1", "Col 2"],
     rows: [
-      ["Value A", "Value B"],
-      ["Value C", "Value D"]
+      ["", ""],
+      ["", ""]
     ],
     style: "default" as const
   };

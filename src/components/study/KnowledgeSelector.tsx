@@ -8,15 +8,17 @@ export function KnowledgeSelectorModal({
   isOpen,
   onClose,
   onSelectMultiple,
+  onSelectWithAssets,
   folderId,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSelectMultiple: (fileNames: string[]) => void;
+  onSelectWithAssets?: (items: { name: string; assetId: string }[]) => void;
   folderId?: string;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
-  const [documents, setDocuments] = useState<{ name: string; status: string }[]>([]);
+  const [documents, setDocuments] = useState<{ name: string; status: string; assetId: string }[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Load knowledge items from API when modal opens
@@ -28,7 +30,7 @@ export function KnowledgeSelectorModal({
           setDocuments(
             items
               .filter((item) => item.asset.status === "ready")
-              .map((item) => ({ name: item.asset.name, status: item.asset.status }))
+              .map((item) => ({ name: item.asset.name, status: item.asset.status, assetId: item.assetId }))
           );
         })
         .catch(() => setDocuments([]))
@@ -47,7 +49,7 @@ export function KnowledgeSelectorModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
@@ -106,6 +108,12 @@ export function KnowledgeSelectorModal({
         <button
           onClick={() => {
             onSelectMultiple(selected);
+            if (onSelectWithAssets) {
+              const selectedItems = documents
+                .filter((d) => selected.includes(d.name))
+                .map((d) => ({ name: d.name, assetId: d.assetId }));
+              onSelectWithAssets(selectedItems);
+            }
             setSelected([]);
             onClose();
           }}

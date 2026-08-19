@@ -115,6 +115,12 @@ export class ApiError extends Error {
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
+    // On 401, retry once after 2s (handles Next.js dev cold-start where middleware isn't ready)
+    if (res.status === 401) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const retryRes = await fetch(res.url);
+      if (retryRes.ok) return retryRes.json();
+    }
     const body = await res.json().catch(() => ({ error: res.statusText }));
     throw new ApiError(body.error || res.statusText, res.status);
   }
@@ -293,7 +299,9 @@ export async function streamChat(data: {
 
 export async function generateFlashcards(data: {
   spaceId: string;
+  folderId?: string;
   count?: number;
+  topic?: string;
 }): Promise<FlashcardData[]> {
   const res = await fetch("/api/generate/flashcards", {
     method: "POST",
@@ -348,11 +356,33 @@ export async function generateStudyGuide(data: {
 
 // ─── AI Generation (Streaming) ──────────────────────────────────────────────
 
+export async function streamNotes(data: {
+  spaceId: string;
+  folderId?: string;
+  assetIds?: string[];
+}): Promise<Response> {
+  const res = await fetch("/api/generate/notes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new ApiError(body.error || res.statusText, res.status);
+  }
+  return res;
+}
+
 export async function streamWrite(data: {
   spaceId: string;
   prompt: string;
   mode: "generate" | "continue" | "improve";
   existingContent?: string;
+  tone?: string;
+  length?: string;
+  lengthUnit?: string;
+  tense?: string;
+  perspective?: string;
 }): Promise<Response> {
   const res = await fetch("/api/generate/write", {
     method: "POST",
@@ -499,6 +529,21 @@ export async function fetchDocLines(
   return handleResponse<DocLineData[]>(res);
 }
 
+export async function saveDocLines(
+  spaceId: string,
+  lines: Array<{ type: string; text: string; tableData?: unknown }>
+): Promise<void> {
+  const res = await fetch(`/api/spaces/${spaceId}/lines`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lines }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new ApiError(body.error || res.statusText, res.status);
+  }
+}
+
 // ─── Messages (chat history) ─────────────────────────────────────────────────
 
 export interface MessageData {
@@ -536,4 +581,13 @@ export async function evaluateQuizAnswer(data: {
     body: JSON.stringify(data),
   });
   return handleResponse(res);
+}
+
+// ─── Flashcards (fetch existing) ─────────────────────────────────────────────
+
+export async function fetchFlashcards(
+  spaceId: string
+): Promise<FlashcardData[]> {
+  const res = await fetch(`/api/spaces/${spaceId}/flashcards`);
+  return handleResponse<FlashcardData[]>(res);
 }

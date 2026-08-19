@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { generateFlashcards } from "@/lib/api";
+import { generateFlashcards, fetchKnowledgeItems, addSpaceResource, fetchFlashcards } from "@/lib/api";
 import {
   Layers, ChevronRight, X, Play, Sparkles, Pencil, Trash2, Check, Plus, Folder, Globe,
   GripVertical, FileText, Link2, FileUp, FolderHeart, ChevronDown, User, Users, RotateCcw,
@@ -98,6 +98,19 @@ export function FlashcardsView({
     setMounted(true);
   }, []);
 
+  // Load existing flashcards from DB on mount (for configured spaces on page refresh)
+  useEffect(() => {
+    if (spaceId && initialConfigured && cards.length === 0) {
+      fetchFlashcards(spaceId)
+        .then((result) => {
+          if (result.length > 0) {
+            setCards(result.map((c) => ({ id: c.id, front: c.front, back: c.back })));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [spaceId]);
+
   const addMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -146,11 +159,16 @@ export function FlashcardsView({
 
   const handleGenerate = async () => {
     setGenerating(true);
-    const count = parseInt(maxAmount) || 10;
+    const count = Math.min(parseInt(maxAmount) || 10, 100);
 
     if (spaceId) {
       try {
-        const result = await generateFlashcards({ spaceId, count });
+        const result = await generateFlashcards({
+          spaceId,
+          folderId,
+          count,
+          topic: topic || undefined,
+        });
         setCards(result.map((c) => ({ id: c.id, front: c.front, back: c.back })));
         setGenerating(false);
         setShowWizard(false);
@@ -159,18 +177,12 @@ export function FlashcardsView({
         return;
       } catch (err) {
         console.error("Failed to generate flashcards:", err);
+        setGenerating(false);
       }
-    }
-
-    // Fallback: use demo cards if no spaceId or API fails
-    setTimeout(() => {
-      const generated = makeDemoCards(topic || spaceName, count);
-      setCards(generated);
+    } else {
+      // Fallback if no spaceId
       setGenerating(false);
-      setShowWizard(false);
-      setIsConfigured(true);
-      onCompleteConfig();
-    }, 2500);
+    }
   };
 
   // Drag and Drop Logic
@@ -678,9 +690,12 @@ export function FlashcardsView({
                     <input
                       type="number"
                       value={maxAmount}
+                      min={1}
+                      max={100}
                       onChange={(e) => setMaxAmount(e.target.value)}
                       className="w-full rounded-xl bg-secondary/60 border border-border px-3.5 py-2.5 text-sm text-foreground outline-none focus:bg-secondary/80 transition-colors"
                     />
+                    <p className="text-[9px] text-muted-foreground mt-1">Maximum 100 flashcards per generation.</p>
                   </div>
 
                   {/* Topic Text box */}
@@ -700,9 +715,17 @@ export function FlashcardsView({
                 <div className="border-t border-border/40 pt-3 mt-4 flex justify-end">
                   <button
                     onClick={handleGenerate}
-                    className="rounded-xl bg-foreground hover:opacity-90 px-6 py-2.5 text-xs font-semibold text-background transition-opacity"
+                    disabled={generating || resources.length === 0 || resources.some(r => r.loading)}
+                    className="rounded-xl bg-foreground hover:opacity-90 px-6 py-2.5 text-xs font-semibold text-background transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Generate
+                    {generating ? (
+                      <span className="flex items-center gap-2">
+                        <span className="size-3.5 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                        Generating...
+                      </span>
+                    ) : (
+                      "Generate"
+                    )}
                   </button>
                 </div>
               </motion.div>
@@ -716,9 +739,28 @@ export function FlashcardsView({
         isOpen={knowledgeOpen}
         onClose={() => setKnowledgeOpen(false)}
         folderId={folderId}
-        onSelectMultiple={(fileNames) => {
-          fileNames.forEach((name) => addResourceItem(name));
+        onSelectMultiple={async (fileNames) => {
+          // Mark as ready immediately (already embedded)
+          fileNames.forEach((name) => {
+            const newId = `res-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+            setResources((prev) => [...prev, { id: newId, name, loading: false }]);
+          });
           setKnowledgeOpen(false);
+
+          // Link existing knowledge assets to this space (no re-embedding)
+          if (spaceId && folderId) {
+            try {
+              const items = await fetchKnowledgeItems(folderId);
+              for (const fileName of fileNames) {
+                const match = items.find((item) => item.asset.name === fileName);
+                if (match) {
+                  await addSpaceResource(spaceId, match.assetId);
+                }
+              }
+            } catch (err) {
+              console.error("Failed to link resources:", err);
+            }
+          }
         }}
       />
 

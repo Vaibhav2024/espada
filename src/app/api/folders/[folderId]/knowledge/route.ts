@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { knowledgeItems, assets } from "@/db/schema";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, AuthError } from "@/lib/auth";
 import { uploadAsset } from "@/lib/upload";
 import { enqueueAssetProcessing } from "@/lib/queue";
 import { resolveFolder } from "@/lib/resolve-folder";
@@ -15,7 +15,13 @@ interface RouteParams {
  * GET /api/folders/:folderId/knowledge — List knowledge items with asset details.
  */
 export async function GET(_req: NextRequest, { params }: RouteParams) {
-  const userId = await requireAuth();
+  let userId: string;
+  try {
+    userId = await requireAuth();
+  } catch (e) {
+    if (e instanceof AuthError) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    throw e;
+  }
   const { folderId } = await params;
   const realFolderId = await resolveFolder(folderId, userId);
 

@@ -1,15 +1,16 @@
 {
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/assets/[assetId]/status/route": "app/api/assets/[assetId]/status/route.js",
   "/api/chat/route": "app/api/chat/route.js",
   "/api/folders/[folderId]/knowledge/route": "app/api/folders/[folderId]/knowledge/route.js",
   "/api/folders/[folderId]/spaces/route": "app/api/folders/[folderId]/spaces/route.js",
   "/api/folders/route": "app/api/folders/route.js",
-  "/api/generate/quiz/route": "app/api/generate/quiz/route.js",
-  "/api/generate/study-guide/route": "app/api/generate/study-guide/route.js",
-  "/api/quiz/evaluate/route": "app/api/quiz/evaluate/route.js",
+  "/api/generate/notes/route": "app/api/generate/notes/route.js",
+  "/api/generate/write/route": "app/api/generate/write/route.js",
+  "/api/spaces/[spaceId]/flashcards/route": "app/api/spaces/[spaceId]/flashcards/route.js",
   "/api/spaces/[spaceId]/lines/route": "app/api/spaces/[spaceId]/lines/route.js",
   "/api/spaces/[spaceId]/messages/route": "app/api/spaces/[spaceId]/messages/route.js",
-  "/api/spaces/[spaceId]/quiz/route": "app/api/spaces/[spaceId]/quiz/route.js",
-  "/api/spaces/[spaceId]/resources/route": "app/api/spaces/[spaceId]/resources/route.js",
+  "/api/spaces/[spaceId]/problems/route": "app/api/spaces/[spaceId]/problems/route.js",
   "/api/spaces/[spaceId]/route": "app/api/spaces/[spaceId]/route.js",
   "/dashboard/page": "app/dashboard/page.js"
 }

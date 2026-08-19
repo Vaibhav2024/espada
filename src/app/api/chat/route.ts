@@ -1,10 +1,13 @@
 import { NextRequest } from "next/server";
+import { streamText } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { db } from "@/db";
 import { messages, assetChunks, spaceResources } from "@/db/schema";
 import { requireAuth, getUserPlan } from "@/lib/auth";
 import { consumeQuota } from "@/lib/quota";
-import { streamTextWithFallback } from "@/lib/ai";
 import { eq, inArray, desc } from "drizzle-orm";
+
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 /**
  * POST /api/chat — Streaming AI chat endpoint.
@@ -63,22 +66,24 @@ export async function POST(req: NextRequest) {
   // Build system prompt with RAG context
   const systemPrompt = buildSystemPrompt(context);
 
-  // Stream with Groq-primary / OpenAI-fallback
-  const { stream } = await streamTextWithFallback({
+  // Stream directly with gpt-4o-mini
+  const result = streamText({
+    model: openai("gpt-4o-mini"),
     system: systemPrompt,
     messages: chatMessages,
-    maxTokens: 300,
-    onFinish: async ({ text: responseText }: { text: string }) => {
-      await db.insert(messages).values({
-        spaceId,
-        sender: "ai",
-        text: responseText,
-        focusedResourceIds: focusedResourceIds ?? null,
-      });
-    },
   });
 
-  return stream.toTextStreamResponse();
+  // Save AI response after streaming completes (non-blocking)
+  Promise.resolve(result.text).then(async (responseText) => {
+    await db.insert(messages).values({
+      spaceId,
+      sender: "ai",
+      text: responseText,
+      focusedResourceIds: focusedResourceIds ?? null,
+    });
+  }).catch(() => {});
+
+  return result.toTextStreamResponse();
 }
 
 /**

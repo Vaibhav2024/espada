@@ -5,8 +5,8 @@ import { redis } from "./redis";
  */
 const PLAN_LIMITS = {
   free: {
-    spacesPerDay: 1,
-    aiMessagesPerDay: 20,
+    spacesPerDay: 3,
+    aiMessagesPerDay: 50,
     uploadSizeMB: 10,
     activeDocs: 5,
     storageMB: 500,

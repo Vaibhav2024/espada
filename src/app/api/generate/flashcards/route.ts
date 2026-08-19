@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { generateText } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { db } from "@/db";
-import { flashcards, assetChunks, spaceResources } from "@/db/schema";
+import { flashcards, assetChunks, spaceResources, knowledgeItems } from "@/db/schema";
 import { requireAuth, getUserPlan } from "@/lib/auth";
 import { consumeQuota } from "@/lib/quota";
-import { generateTextWithFallback } from "@/lib/ai";
+import { resolveFolder } from "@/lib/resolve-folder";
 import { eq, inArray } from "drizzle-orm";
 
+const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
 /**
- * POST /api/generate/flashcards — Generate flashcards from space resources.
- * Body: { spaceId: string, count?: number }
+ * POST /api/generate/flashcards — Generate flashcards from space/folder resources.
+ * Body: { spaceId, folderId?, count?, topic? }
  */
 export async function POST(req: NextRequest) {
   const userId = await requireAuth();
@@ -22,15 +26,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { spaceId, count = 10 } = await req.json();
+  const { spaceId, folderId, count = 10, topic } = await req.json();
   if (!spaceId) {
-    return NextResponse.json(
-      { error: "spaceId is required" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "spaceId is required" }, { status: 400 });
   }
 
-  const context = await getSpaceContext(spaceId);
+  // Cap at 100 flashcards
+  const cardCount = Math.min(Number(count) || 10, 100);
+
+  // Get context from space resources first, then fall back to folder knowledge
+  let context = await getSpaceContext(spaceId);
+  if (!context && folderId) {
+    const realFolderId = await resolveFolder(folderId, userId);
+    context = await getFolderContext(realFolderId);
+  }
+
   if (!context) {
     return NextResponse.json(
       { error: "No content available to generate flashcards from" },
@@ -38,9 +48,28 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { text } = await generateTextWithFallback({
-    system: `You generate study flashcards. Output ONLY a JSON array of objects with "front" and "back" fields. No markdown, no explanation.`,
-    prompt: `Generate ${count} flashcards from this study material:\n\n${context}\n\nOutput format: [{"front": "question", "back": "answer"}]`,
+  const topicInstruction = topic
+    ? `Focus specifically on this topic: ${topic}`
+    : "Cover the main concepts from the material.";
+
+  const { text } = await generateText({
+    model: openai("gpt-4o-mini"),
+    system: `You generate study flashcards. Output ONLY a valid JSON array. No markdown, no explanation, no code fences.`,
+    prompt: `Generate exactly ${cardCount} flashcards from this study material.
+${topicInstruction}
+
+Material:
+${context}
+
+Output format (JSON array):
+[{"front": "Question or term on the front of the card", "back": "Answer or definition on the back"}]
+
+Rules:
+- Each flashcard should test ONE concept
+- Front should be a clear question or key term
+- Back should be a concise but complete answer (1-3 sentences)
+- Generate exactly ${cardCount} flashcards
+- Cover different aspects of the material, don't repeat`,
   });
 
   let cards: { front: string; back: string }[];
@@ -57,6 +86,9 @@ export async function POST(req: NextRequest) {
       );
     }
   }
+
+  // Cap results
+  cards = cards.slice(0, cardCount);
 
   const inserted = await db
     .insert(flashcards)
@@ -86,7 +118,25 @@ async function getSpaceContext(spaceId: string): Promise<string> {
     .select({ content: assetChunks.content })
     .from(assetChunks)
     .where(inArray(assetChunks.assetId, assetIds))
-    .limit(10);
+    .limit(15);
+
+  return chunks.map((c) => c.content).join("\n\n");
+}
+
+async function getFolderContext(folderId: string): Promise<string> {
+  const items = await db
+    .select({ assetId: knowledgeItems.assetId })
+    .from(knowledgeItems)
+    .where(eq(knowledgeItems.folderId, folderId));
+
+  const assetIds = items.map((i) => i.assetId);
+  if (assetIds.length === 0) return "";
+
+  const chunks = await db
+    .select({ content: assetChunks.content })
+    .from(assetChunks)
+    .where(inArray(assetChunks.assetId, assetIds))
+    .limit(20);
 
   return chunks.map((c) => c.content).join("\n\n");
 }
