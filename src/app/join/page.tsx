@@ -1,12 +1,12 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { Suspense, useRef, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { joinFolderByCode } from "@/lib/api";
 
-export default function JoinPage() {
+function JoinContent() {
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -15,82 +15,79 @@ export default function JoinPage() {
   const searchParams = useSearchParams();
   const submittedCodeRef = useRef<string>("");
 
-  // Handle the actual submission
-  async function doSubmit(code: string) {
-    // Don't re-submit the same code
-    if (submittedCodeRef.current === code) return;
-    submittedCodeRef.current = code;
-    
-    setSubmitting(true);
-    setError("");
+  const handleSubmit = useCallback(
+    async (code: string) => {
+      if (submitting || submittedCodeRef.current === code) return;
+      submittedCodeRef.current = code;
+      setSubmitting(true);
+      setError("");
 
-    try {
-      const { folderId } = await joinFolderByCode(code);
-      router.push(`/dashboard?folder=${folderId}`);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Something went wrong";
-      if (message.includes("Invalid") || message.includes("404")) {
-        setError("Invalid code");
-      } else if (message.includes("Unauthorized") || message.includes("401")) {
-        setError("Please sign in first");
-      } else {
-        setError(message || "Failed to join folder");
+      try {
+        const { folderId } = await joinFolderByCode(code);
+        router.push(`/dashboard?folder=${folderId}`);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Something went wrong";
+        if (message.includes("Invalid code") || message.includes("404")) {
+          setError("Invalid code");
+        } else if (message.includes("Unauthorized") || message.includes("401")) {
+          setError("Please sign in first");
+        } else {
+          setError(message || "Failed to join folder");
+        }
+        setSubmitting(false);
       }
-      setSubmitting(false);
-      // Don't clear submittedCodeRef here — prevents re-submission of same bad code
-    }
-  }
+    },
+    [submitting, router]
+  );
 
-  // Auto-submit from URL param on mount
+  // Pre-fill and submit if code is present in URL param (e.g. /join?code=ABCDEF)
   useEffect(() => {
     const codeParam = searchParams.get("code");
-    if (codeParam && codeParam.length >= 6) {
-      const displayChars = codeParam.slice(0, 6).toUpperCase().split("");
-      setDigits(displayChars);
-      doSubmit(codeParam);
+    if (codeParam && codeParam.length === 6) {
+      const chars = codeParam.toUpperCase().split("");
+      setDigits(chars);
+      handleSubmit(codeParam.toUpperCase());
     }
-    // Only run on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams, handleSubmit]);
 
   const setDigit = (i: number, v: string) => {
     const c = v.replace(/[^a-zA-Z0-9]/g, "").slice(-1).toUpperCase();
-    const newDigits = digits.map((d, idx) => (idx === i ? c : d));
+    const newDigits = [...digits];
+    newDigits[i] = c;
     setDigits(newDigits);
     setError("");
-    // Allow re-submit with new code
-    submittedCodeRef.current = "";
 
-    if (c && i < 5) {
-      refs.current[i + 1]?.focus();
-    }
+    if (c && i < 5) refs.current[i + 1]?.focus();
 
-    // Check if all 6 are filled and auto-submit
-    const code = newDigits.join("");
-    if (code.length === 6 && newDigits.every((d) => d !== "")) {
-      doSubmit(code);
+    const fullCode = newDigits.join("");
+    if (fullCode.length === 6 && newDigits.every((d) => d !== "")) {
+      handleSubmit(fullCode);
     }
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 6);
-    if (pasted.length === 6) {
-      const newDigits = pasted.split("");
-      setDigits(newDigits);
-      setError("");
-      submittedCodeRef.current = "";
-      doSubmit(pasted);
-    } else if (pasted.length > 0) {
-      const newDigits = ["", "", "", "", "", ""];
-      for (let i = 0; i < pasted.length; i++) {
+    const pasted = e.clipboardData
+      .getData("text")
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .toUpperCase()
+      .slice(0, 6);
+
+    if (pasted.length > 0) {
+      const newDigits = [...digits];
+      for (let i = 0; i < pasted.length && i < 6; i++) {
         newDigits[i] = pasted[i];
       }
       setDigits(newDigits);
-      setError("");
-      submittedCodeRef.current = "";
+
       const nextEmpty = newDigits.findIndex((d) => !d);
-      if (nextEmpty !== -1) refs.current[nextEmpty]?.focus();
+      const focusIdx = nextEmpty === -1 ? 5 : nextEmpty;
+      refs.current[focusIdx]?.focus();
+
+      const fullCode = newDigits.join("");
+      if (fullCode.length === 6 && newDigits.every((d) => d !== "")) {
+        handleSubmit(fullCode);
+      }
     }
   };
 
@@ -113,36 +110,51 @@ export default function JoinPage() {
         {digits.map((d, i) => (
           <input
             key={i}
-            ref={(el) => { refs.current[i] = el; }}
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
             value={d}
             inputMode="text"
-            autoComplete="off"
-            aria-label={`Character ${i + 1}`}
+            aria-label={`Digit ${i + 1}`}
             onChange={(e) => setDigit(i, e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Backspace" && !digits[i] && i > 0) refs.current[i - 1]?.focus();
             }}
             disabled={submitting}
-            placeholder="—"
+            placeholder="0"
             className={`size-[68px] rounded-2xl bg-secondary text-center text-2xl font-semibold text-foreground outline-none placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-ring disabled:opacity-50 transition-colors ${
-              error ? "ring-2 ring-red-500" : ""
+              error ? "ring-2 ring-red-500 border-red-500" : ""
             }`}
           />
         ))}
       </div>
 
       {error && (
-        <p className="mt-4 text-sm font-semibold text-red-400">
+        <p className="mt-4 text-sm font-semibold text-red-400 animate-in fade-in slide-in-from-bottom-2">
           {error}
         </p>
       )}
 
-      {submitting && !error && (
+      {submitting && (
         <div className="mt-6 flex items-center gap-2">
           <div className="w-4 h-4 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
           <span className="text-sm text-muted-foreground">Joining folder...</span>
         </div>
       )}
     </div>
+  );
+}
+
+export default function JoinPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <div className="w-6 h-6 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <JoinContent />
+    </Suspense>
   );
 }
