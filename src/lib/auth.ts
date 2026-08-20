@@ -2,7 +2,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { db } from "@/db";
 import { users, subscriptions } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { nanoid } from "nanoid";
+import { generateInviteCode } from "@/lib/invite-code";
 import type { Plan } from "./quota";
 
 /**
@@ -61,7 +61,7 @@ async function ensureUserExists(userId: string): Promise<void> {
     email,
     name,
     avatarUrl: clerkUser?.imageUrl ?? null,
-    inviteCode: nanoid(6),
+    inviteCode: generateInviteCode(),
   });
 
   // Create default free subscription

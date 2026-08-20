@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { folders, folderMembers } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-import { nanoid } from "nanoid";
+import { generateInviteCode } from "@/lib/invite-code";
 
 /**
  * Resolves a folderId from the URL.
@@ -34,7 +34,7 @@ export async function resolveFolder(
       isPublic: true,
       joinPreference: "link",
       ownerId: userId,
-      inviteCode: nanoid(6),
+      inviteCode: generateInviteCode(),
     })
     .returning();
 

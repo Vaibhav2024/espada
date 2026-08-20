@@ -4,7 +4,7 @@ import { folders, folderMembers } from "@/db/schema";
 import { requireAuth, getUserPlan, AuthError } from "@/lib/auth";
 import { consumeQuota } from "@/lib/quota";
 import { eq } from "drizzle-orm";
-import { nanoid } from "nanoid";
+import { generateInviteCode } from "@/lib/invite-code";
 
 /**
  * GET /api/folders — List all folders the user owns or is a member of.
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const inviteCode = nanoid(6);
+  const inviteCode = generateInviteCode();
 
   const [folder] = await db
     .insert(folders)
