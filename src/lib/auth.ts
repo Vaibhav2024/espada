@@ -61,7 +61,7 @@ async function ensureUserExists(userId: string): Promise<void> {
     email,
     name,
     avatarUrl: clerkUser?.imageUrl ?? null,
-    inviteCode: nanoid(8),
+    inviteCode: nanoid(6),
   });
 
   // Create default free subscription

@@ -52,7 +52,7 @@ export async function POST(req: Request) {
         email,
         name,
         avatarUrl: image_url ?? null,
-        inviteCode: nanoid(8),
+        inviteCode: nanoid(6),
       });
 
       // Create default free subscription

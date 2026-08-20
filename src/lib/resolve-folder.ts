@@ -34,7 +34,7 @@ export async function resolveFolder(
       isPublic: true,
       joinPreference: "link",
       ownerId: userId,
-      inviteCode: nanoid(8),
+      inviteCode: nanoid(6),
     })
     .returning();
 

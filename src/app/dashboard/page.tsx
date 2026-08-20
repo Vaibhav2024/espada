@@ -377,6 +377,7 @@ export interface FolderData {
   themeColor: string;
   iconName: string;
   isPublic: boolean;
+  inviteCode: string;
 }
 
 export default function Dashboard() {
@@ -486,6 +487,7 @@ export default function Dashboard() {
         themeColor: folder.themeColor,
         iconName: folder.iconName,
         isPublic: folder.isPublic,
+        inviteCode: folder.inviteCode,
       };
       setFolders((prev) => [...prev, newFolder]);
       setActiveFolderId(folder.id);
@@ -515,6 +517,7 @@ export default function Dashboard() {
           themeColor: f.themeColor,
           iconName: f.iconName,
           isPublic: f.isPublic,
+          inviteCode: f.inviteCode,
         }));
 
         // If the API returned a "My folder" (auto-created from "default" virtual folder),
@@ -1186,7 +1189,11 @@ export default function Dashboard() {
 
         {folderOpen && showMembers ? (
           <div className="hidden shrink-0 md:block">
-            <MembersPanel onClose={() => setShowMembers(false)} />
+            <MembersPanel
+              folderId={activeFolderId || undefined}
+              inviteCode={activeFolder?.inviteCode}
+              onClose={() => setShowMembers(false)}
+            />
           </div>
         ) : null}
 
@@ -1233,7 +1240,7 @@ export default function Dashboard() {
                   fetchFolders().then((apiFolders) => {
                     const foldersMapped = apiFolders.map((f) => ({
                       id: f.id, name: f.name, themeName: f.themeName,
-                      themeColor: f.themeColor, iconName: f.iconName, isPublic: f.isPublic,
+                      themeColor: f.themeColor, iconName: f.iconName, isPublic: f.isPublic, inviteCode: f.inviteCode,
                     }));
                     const autoCreated = foldersMapped.find((f) => f.name === "My folder");
                     if (autoCreated && hasDefaultFolder) {

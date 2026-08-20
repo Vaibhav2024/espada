@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { folders, folderMembers } from "@/db/schema";
 import { requireAuth } from "@/lib/auth";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 
 /**
  * POST /api/folders/join — Join a folder by invite code only (no folder ID needed).
@@ -20,11 +20,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Look up the folder by invite code
+  const trimmedCode = code.trim();
+
+  // Look up the folder by invite code (case-insensitive to handle UI uppercasing)
   const [folder] = await db
     .select({ id: folders.id, inviteCode: folders.inviteCode })
     .from(folders)
-    .where(eq(folders.inviteCode, code.trim()))
+    .where(sql`lower(${folders.inviteCode}) = lower(${trimmedCode})`)
     .limit(1);
 
   if (!folder) {

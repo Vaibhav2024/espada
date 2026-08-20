@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const inviteCode = nanoid(8);
+  const inviteCode = nanoid(6);
 
   const [folder] = await db
     .insert(folders)
