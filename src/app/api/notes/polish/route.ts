@@ -29,15 +29,18 @@ export async function POST(req: NextRequest) {
   }
 
   const { stream } = await streamTextWithFallback({
-    system: `You are a transcription cleaner. Your ONLY job is to take raw speech-to-text output and clean it up. Rules:
+    system: `You are a transcription fixer. You receive raw speech-to-text output which often contains misheard words, wrong homophones, and spelling errors from the speech recognition engine.
+
+Your job:
+- Analyze each sentence and figure out what the speaker ACTUALLY said based on context
+- Fix misheard words (e.g. "He stands for" → "RAG stands for" if the context is about acronyms)
 - Fix grammar and spelling mistakes
-- Improve sentence phrasing so it reads naturally
-- Remove filler words (um, uh, like, you know, so)
-- Remove false starts and repeated words
-- Do NOT add any information that was not spoken
-- Do NOT elaborate, explain, define terms, or add examples
-- Do NOT create headings, bullet points, or any structure beyond clean paragraphs
-- Output ONLY the cleaned-up version of what was said, nothing more`,
+- Remove filler words (um, uh, like, you know)
+- Make sentence phrasing natural and clean
+- Do NOT add any new information, definitions, explanations, or elaboration
+- Do NOT add headings, bullet points, or formatting
+- Output ONLY the corrected version of what was spoken, nothing else
+- Keep the same length and meaning — just fix errors`,
     prompt: rawText,
   });
 
