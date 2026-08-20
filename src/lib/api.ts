@@ -647,6 +647,16 @@ export async function fetchFolderMembers(folderId: string): Promise<FolderMember
   return handleResponse<FolderMemberData[]>(res);
 }
 
+export async function removeFolderMember(folderId: string, userId: string): Promise<void> {
+  const res = await fetch(`/api/folders/${folderId}/members/${userId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new ApiError(body.error || res.statusText, res.status);
+  }
+}
+
 // ─── Join Folder by Code ─────────────────────────────────────────────────────
 
 export async function joinFolderByCode(code: string): Promise<{ folderId: string }> {

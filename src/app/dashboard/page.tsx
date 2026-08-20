@@ -61,6 +61,7 @@ import {
   deleteSpace as apiDeleteSpace,
   uploadAsset,
   fetchKnowledgeItems,
+  fetchFolderMembers,
   type FolderData as ApiFolderData,
 } from "@/lib/api";
 
@@ -252,13 +253,6 @@ function Rail({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <button
-          onClick={onInvite}
-          aria-label="Invite friends"
-          className="text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <Send size={18} />
-        </button>
         <button className="text-muted-foreground transition-colors hover:text-foreground">
           <LifeBuoy size={18} />
         </button>
@@ -378,6 +372,7 @@ export interface FolderData {
   iconName: string;
   isPublic: boolean;
   inviteCode: string;
+  ownerId: string;
 }
 
 export default function Dashboard() {
@@ -385,6 +380,7 @@ export default function Dashboard() {
   const [folders, setFolders] = useState<FolderData[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>("default");
   const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItem[]>([]);
+  const [memberCount, setMemberCount] = useState(1);
 
   // Default folder states
   const [hasDefaultFolder, setHasDefaultFolder] = useState(true);
@@ -488,6 +484,7 @@ export default function Dashboard() {
         iconName: folder.iconName,
         isPublic: folder.isPublic,
         inviteCode: folder.inviteCode,
+        ownerId: folder.ownerId,
       };
       setFolders((prev) => [...prev, newFolder]);
       setActiveFolderId(folder.id);
@@ -518,6 +515,7 @@ export default function Dashboard() {
           iconName: f.iconName,
           isPublic: f.isPublic,
           inviteCode: f.inviteCode,
+          ownerId: f.ownerId,
         }));
 
         // If the API returned a "My folder" (auto-created from "default" virtual folder),
@@ -591,6 +589,17 @@ export default function Dashboard() {
         });
       })
       .catch(() => {});
+  }, [activeFolderId]);
+
+  // Load member count when active folder changes
+  useEffect(() => {
+    if (!activeFolderId || activeFolderId === "default") {
+      setMemberCount(1);
+      return;
+    }
+    fetchFolderMembers(activeFolderId)
+      .then((members) => setMemberCount(members.length))
+      .catch(() => setMemberCount(1));
   }, [activeFolderId]);
 
   const [activeTool, setActiveTool] = useState<ToolId | null>(null);
@@ -1132,6 +1141,7 @@ export default function Dashboard() {
               folderIconName={activeFolderId === "default" ? defaultFolderIconName : (activeFolder ? activeFolder.iconName : "Folder")}
               folderThemeColor={activeFolderId === "default" ? defaultFolderThemeColor : (activeFolder ? activeFolder.themeColor : "#a1a1aa")}
               knowledgeCount={knowledgeItems.filter((k) => (k.folderId || "default") === activeFolderId).length}
+              memberCount={memberCount}
               activeSpaceId={activeSpaceId}
               onSelectSpace={(id) => {
                 // Clean up previous unconfigured space if leaving it
@@ -1192,7 +1202,16 @@ export default function Dashboard() {
             <MembersPanel
               folderId={activeFolderId || undefined}
               inviteCode={activeFolder?.inviteCode}
+              ownerId={activeFolder?.ownerId}
               onClose={() => setShowMembers(false)}
+              onMemberRemoved={() => {
+                // Refresh member count
+                if (activeFolderId && activeFolderId !== "default") {
+                  fetchFolderMembers(activeFolderId)
+                    .then((m) => setMemberCount(m.length))
+                    .catch(() => {});
+                }
+              }}
             />
           </div>
         ) : null}
@@ -1240,7 +1259,7 @@ export default function Dashboard() {
                   fetchFolders().then((apiFolders) => {
                     const foldersMapped = apiFolders.map((f) => ({
                       id: f.id, name: f.name, themeName: f.themeName,
-                      themeColor: f.themeColor, iconName: f.iconName, isPublic: f.isPublic, inviteCode: f.inviteCode,
+                      themeColor: f.themeColor, iconName: f.iconName, isPublic: f.isPublic, inviteCode: f.inviteCode, ownerId: f.ownerId,
                     }));
                     const autoCreated = foldersMapped.find((f) => f.name === "My folder");
                     if (autoCreated && hasDefaultFolder) {

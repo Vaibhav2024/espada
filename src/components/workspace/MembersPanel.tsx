@@ -9,23 +9,34 @@ import {
   Brain,
   Globe,
   Lock,
-  Check,
 } from "lucide-react";
-import { fetchFolderMembers, type FolderMemberData } from "@/lib/api";
+import { fetchFolderMembers, removeFolderMember, type FolderMemberData } from "@/lib/api";
+import { useUser } from "@clerk/nextjs";
 
 interface MembersPanelProps {
   folderId?: string;
   inviteCode?: string;
+  ownerId?: string;
   onClose: () => void;
+  onMemberRemoved?: () => void;
 }
 
-export function MembersPanel({ folderId, inviteCode, onClose }: MembersPanelProps) {
+export function MembersPanel({ folderId, inviteCode, ownerId, onClose, onMemberRemoved }: MembersPanelProps) {
+  const { user } = useUser();
+  const currentUserId = user?.id;
+  const isOwner = currentUserId === ownerId;
+
   const [showInvitePopup, setShowInvitePopup] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [joinPreference, setJoinPreference] = useState<"link" | "web">("link");
   const [members, setMembers] = useState<FolderMemberData[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ userId: string; x: number; y: number } | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<{ userId: string; name: string } | null>(null);
+  const [removing, setRemoving] = useState(false);
 
   const inviteLink = inviteCode
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/join?code=${inviteCode}`
@@ -41,6 +52,30 @@ export function MembersPanel({ folderId, inviteCode, onClose }: MembersPanelProp
         .finally(() => setLoading(false));
     }
   }, [folderId]);
+
+  // Close context menu on click outside
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    if (contextMenu) {
+      document.addEventListener("click", handleClick);
+      return () => document.removeEventListener("click", handleClick);
+    }
+  }, [contextMenu]);
+
+  const handleRemoveMember = async () => {
+    if (!confirmRemove || !folderId) return;
+    setRemoving(true);
+    try {
+      await removeFolderMember(folderId, confirmRemove.userId);
+      setMembers((prev) => prev.filter((m) => m.userId !== confirmRemove.userId));
+      onMemberRemoved?.();
+    } catch (err) {
+      console.error("Failed to remove member:", err);
+    } finally {
+      setRemoving(false);
+      setConfirmRemove(null);
+    }
+  };
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(inviteLink);
@@ -104,6 +139,13 @@ export function MembersPanel({ folderId, inviteCode, onClose }: MembersPanelProp
               <div
                 key={member.userId}
                 className="flex items-center gap-3 rounded-xl hover:bg-secondary/40 p-2 -mx-2 transition-colors"
+                onContextMenu={(e) => {
+                  // Only show remove option if current user is owner and target is not owner
+                  if (isOwner && member.role !== "owner") {
+                    e.preventDefault();
+                    setContextMenu({ userId: member.userId, x: e.clientX, y: e.clientY });
+                  }
+                }}
               >
                 <div className="flex size-9 items-center justify-center rounded-xl bg-zinc-800 text-foreground font-semibold overflow-hidden">
                   {member.avatarUrl ? (
@@ -243,6 +285,55 @@ export function MembersPanel({ folderId, inviteCode, onClose }: MembersPanelProp
                 className="shrink-0 rounded-lg bg-foreground px-3 py-1.5 text-[11px] font-semibold text-background hover:opacity-90 transition active:scale-95 disabled:opacity-50"
               >
                 {copiedCode ? "Copied!" : "Copy code"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Right-click context menu for removing members */}
+      {contextMenu && (
+        <div
+          style={{ position: "fixed", left: contextMenu.x, top: contextMenu.y, zIndex: 9999 }}
+          className="rounded-xl border border-border bg-[#1c1c1f] p-1 shadow-2xl min-w-[140px]"
+        >
+          <button
+            onClick={() => {
+              const member = members.find((m) => m.userId === contextMenu.userId);
+              setConfirmRemove({
+                userId: contextMenu.userId,
+                name: member?.name || member?.email || "this member",
+              });
+              setContextMenu(null);
+            }}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-red-400 hover:bg-red-500/10 transition-colors"
+          >
+            Remove
+          </button>
+        </div>
+      )}
+
+      {/* Confirm remove dialog */}
+      {confirmRemove && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm rounded-2xl">
+          <div className="rounded-2xl border border-border bg-[#161617] p-6 shadow-2xl max-w-[280px] text-center">
+            <p className="text-sm font-bold text-foreground mb-2">Remove member?</p>
+            <p className="text-xs text-muted-foreground mb-5">
+              Are you sure you want to remove <strong className="text-foreground">{confirmRemove.name}</strong> from this folder?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmRemove(null)}
+                className="flex-1 rounded-xl bg-secondary/60 border border-border py-2 text-xs font-semibold text-foreground hover:bg-secondary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRemoveMember}
+                disabled={removing}
+                className="flex-1 rounded-xl bg-red-500/20 border border-red-500/30 py-2 text-xs font-semibold text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-50"
+              >
+                {removing ? "Removing..." : "Remove"}
               </button>
             </div>
           </div>

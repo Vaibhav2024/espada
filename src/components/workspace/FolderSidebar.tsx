@@ -63,6 +63,7 @@ export function FolderSidebar({
   folderIconName = "Folder",
   folderThemeColor = "#a1a1aa",
   knowledgeCount = 0,
+  memberCount = 1,
 }: {
   collapsed: boolean;
   onToggle: () => void;
@@ -81,6 +82,7 @@ export function FolderSidebar({
   folderIconName?: string;
   folderThemeColor?: string;
   knowledgeCount?: number;
+  memberCount?: number;
 }) {
   const FolderIcon = (Lucide as any)[folderIconName] || Lucide.Folder;
   // Context Menu State
@@ -241,7 +243,7 @@ export function FolderSidebar({
             <User size={15} className="text-muted-foreground" />
             <span className="font-semibold">Members</span>
           </span>
-          <span className="text-muted-foreground text-xs bg-secondary/80 px-1.5 py-0.5 rounded">1</span>
+          <span className="text-muted-foreground text-xs bg-secondary/80 px-1.5 py-0.5 rounded">{memberCount}</span>
         </button>
         <button
           onClick={onKnowledgeToggle}
