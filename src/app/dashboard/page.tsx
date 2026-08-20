@@ -62,6 +62,7 @@ import {
   uploadAsset,
   fetchKnowledgeItems,
   fetchFolderMembers,
+  fetchUserProfile,
   type FolderData as ApiFolderData,
 } from "@/lib/api";
 
@@ -602,6 +603,19 @@ export default function Dashboard() {
       .catch(() => setMemberCount(1));
   }, [activeFolderId]);
 
+  // Check user subscription status on mount
+  useEffect(() => {
+    fetchUserProfile()
+      .then((profile) => {
+        if (profile.subscription) {
+          const isPaid = profile.subscription.plan === "pro" && profile.subscription.status === "active";
+          const hasBonus = profile.subscription.bonusProUntil && new Date(profile.subscription.bonusProUntil) > new Date();
+          setUserIsPro(isPaid || !!hasBonus);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const [activeTool, setActiveTool] = useState<ToolId | null>(null);
   const [folderOpen, setFolderOpen] = useState(true); // Default to true to show the spaces sidebar
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -618,6 +632,7 @@ export default function Dashboard() {
   const [pendingPrivateSpace, setPendingPrivateSpace] = useState(false);
   const [showQuizWizard, setShowQuizWizard] = useState(false);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
+  const [userIsPro, setUserIsPro] = useState(false);
 
   // Note: removed the old useEffect that filtered unconfigured spaces
   // Spaces now persist in the DB and should always be shown
@@ -1432,6 +1447,7 @@ export default function Dashboard() {
       <SubscriptionModal
         isOpen={subscriptionOpen}
         onClose={() => setSubscriptionOpen(false)}
+        isPro={userIsPro}
       />
 
       {/* Floating Folder Context Menu (Rename / Delete) */}

@@ -32,9 +32,11 @@ const COMPARISON_DATA: FeatureRow[] = [
 export function SubscriptionModal({
   isOpen,
   onClose,
+  isPro = false,
 }: {
   isOpen: boolean;
   onClose: () => void;
+  isPro?: boolean;
 }) {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annually">("annually");
   const [upgrading, setUpgrading] = useState(false);
@@ -226,10 +228,14 @@ export function SubscriptionModal({
 
               <button
                 onClick={handleUpgrade}
-                disabled={upgrading}
-                className="w-full mt-6 rounded-xl bg-foreground hover:opacity-90 py-2.5 text-xs font-bold text-background cursor-pointer text-center transition-all shadow-md shadow-foreground/5 hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={upgrading || isPro}
+                className={`w-full mt-6 rounded-xl py-2.5 text-xs font-bold text-center transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isPro
+                    ? "bg-[#10b981]/20 border border-[#10b981]/30 text-[#10b981] cursor-default"
+                    : "bg-foreground hover:opacity-90 text-background cursor-pointer shadow-foreground/5 hover:scale-[1.01]"
+                }`}
               >
-                {upgrading ? "Processing..." : "Upgrade to Pro"}
+                {isPro ? "Already Subscribed" : upgrading ? "Processing..." : "Upgrade to Pro"}
               </button>
             </div>
 
