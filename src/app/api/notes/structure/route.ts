@@ -4,8 +4,9 @@ import { consumeQuota } from "@/lib/quota";
 import { streamTextWithFallback } from "@/lib/ai";
 
 /**
- * POST /api/notes/polish — Polish/clean up transcribed or raw notes.
- * Used by RecordingView to clean up Web Speech API transcription output.
+ * POST /api/notes/structure — Convert raw text into well-structured notes.
+ * Used by the "Polish Notes" button in RecordingView.
+ * Takes the full editor content and returns structured notes with headings, bullets, etc.
  * Body: { spaceId: string, rawText: string }
  */
 export async function POST(req: NextRequest) {
@@ -29,16 +30,16 @@ export async function POST(req: NextRequest) {
   }
 
   const { stream } = await streamTextWithFallback({
-    system: `You are a transcription cleaner. Your ONLY job is to take raw speech-to-text output and clean it up. Rules:
-- Fix grammar and spelling mistakes
-- Improve sentence phrasing so it reads naturally
-- Remove filler words (um, uh, like, you know, so)
-- Remove false starts and repeated words
-- Do NOT add any information that was not spoken
-- Do NOT elaborate, explain, define terms, or add examples
-- Do NOT create headings, bullet points, or any structure beyond clean paragraphs
-- Output ONLY the cleaned-up version of what was said, nothing more`,
-    prompt: rawText,
+    system: `You are a note structuring assistant. Take the raw text provided and transform it into well-organized, structured study notes. Rules:
+- Create clear headings (use # for main heading, ## for subheadings, ### for sub-subheadings)
+- Use bullet points (- ) for key facts and details
+- Bold important terms using **term**
+- Use > for notable quotes or critical points
+- Organize content logically by topic
+- Keep all factual content from the original — do not remove information
+- Do NOT add information that was not in the original text
+- Make it scannable and easy to review`,
+    prompt: `Structure these notes into organized study material:\n\n${rawText}`,
   });
 
   return stream.toTextStreamResponse();

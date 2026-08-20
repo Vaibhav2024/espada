@@ -903,21 +903,63 @@ export function RecordingView({
 
     if (spaceId && rawText.trim()) {
       try {
-        const response = await streamPolish({ spaceId, rawText });
-        let polished = "";
-        await readStream(response, (chunk) => {
-          polished += chunk;
+        // Call the structure endpoint (different from the recording cleaner)
+        const response = await fetch("/api/notes/structure", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ spaceId, rawText }),
         });
-        // Parse polished text into doc lines
-        const polishedLines: DocLine[] = polished.split("\n").filter(Boolean).map((text, i) => ({
-          id: `p-${Date.now()}-${i}`,
-          text,
-          type: text.startsWith("#") ? "h2" : "plain" as DocLine["type"],
-        }));
-        setIsPolishing(false);
-        if (polishedLines.length > 0) {
-          updateLinesAndHistory(polishedLines);
+
+        if (!response.ok || !response.body) {
+          throw new Error("Polish request failed");
         }
+
+        // Clear existing lines and stream new structured notes in real-time
+        setLines([{ id: `polish-placeholder-${Date.now()}`, text: "", type: "plain" }]);
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          fullText += chunk;
+
+          // Parse and update editor in real-time
+          const streamedLines = fullText.split("\n").filter(Boolean);
+          const parsedLines: DocLine[] = streamedLines.map((line, idx) => {
+            let type: DocLine["type"] = "plain";
+            let text = line;
+            if (line.startsWith("### ")) { type = "h3"; text = line.slice(4); }
+            else if (line.startsWith("## ")) { type = "h2"; text = line.slice(3); }
+            else if (line.startsWith("# ")) { type = "h1"; text = line.slice(2); }
+            else if (line.startsWith("- ") || line.startsWith("• ")) { type = "bullet"; text = line.slice(2); }
+            else if (line.startsWith("> ")) { type = "quote"; text = line.slice(2); }
+            return { id: `polish-line-${idx}`, text, type };
+          });
+
+          setLines(parsedLines);
+        }
+
+        // Final commit with stable IDs
+        const finalLines: DocLine[] = fullText.split("\n").filter(Boolean).map((line, idx) => {
+          let type: DocLine["type"] = "plain";
+          let text = line;
+          if (line.startsWith("### ")) { type = "h3"; text = line.slice(4); }
+          else if (line.startsWith("## ")) { type = "h2"; text = line.slice(3); }
+          else if (line.startsWith("# ")) { type = "h1"; text = line.slice(2); }
+          else if (line.startsWith("- ") || line.startsWith("• ")) { type = "bullet"; text = line.slice(2); }
+          else if (line.startsWith("> ")) { type = "quote"; text = line.slice(2); }
+          return { id: `p-${Date.now()}-${idx}`, text, type };
+        });
+
+        if (finalLines.length > 0) {
+          updateLinesAndHistory(finalLines);
+        }
+
+        setIsPolishing(false);
         return;
       } catch (err) {
         console.error("Polish failed:", err);
