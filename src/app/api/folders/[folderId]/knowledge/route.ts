@@ -25,6 +25,10 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
   const { folderId } = await params;
   const realFolderId = await resolveFolder(folderId, userId);
 
+  if (!realFolderId) {
+    return NextResponse.json([]);
+  }
+
   const items = await db
     .select({
       id: knowledgeItems.id,
@@ -48,6 +52,11 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const userId = await requireAuth();
   const { folderId } = await params;
   const realFolderId = await resolveFolder(folderId, userId);
+
+  if (!realFolderId) {
+    return NextResponse.json({ error: "Folder not found" }, { status: 404 });
+  }
+
   const contentType = req.headers.get("content-type") ?? "";
 
   if (contentType.includes("multipart/form-data")) {

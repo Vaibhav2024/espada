@@ -261,9 +261,9 @@ export function SolveView({
     }
   };
 
-  const addResourceItem = (name: string) => {
+  const addResourceItem = (name: string, alreadyReady?: boolean) => {
     const newId = `res-${Date.now()}`;
-    setResources((prev) => [...prev, { id: newId, name, loading: true }]);
+    setResources((prev) => [...prev, { id: newId, name, loading: !alreadyReady }]);
     return newId;
   };
 
@@ -418,9 +418,9 @@ export function SolveView({
   const [popupAddMenuOpen, setPopupAddMenuOpen] = useState(false);
   const [popupKnowledgeOpen, setPopupKnowledgeOpen] = useState(false);
 
-  const addPopupResource = (name: string) => {
+  const addPopupResource = (name: string, alreadyReady?: boolean) => {
     const newId = `res-popup-${Date.now()}`;
-    setPopupResources((prev) => [...prev, { id: newId, name, loading: true }]);
+    setPopupResources((prev) => [...prev, { id: newId, name, loading: !alreadyReady }]);
     setTimeout(() => {
       setPopupResources((prev) => prev.map((r) => (r.id === newId ? { ...r, loading: false } : r)));
     }, 2000);
@@ -749,7 +749,7 @@ export function SolveView({
           onClose={() => setKnowledgeOpen(false)}
           folderId={folderId}
           onSelectMultiple={(fileNames) => {
-            fileNames.forEach((name) => addResourceItem(name));
+            fileNames.forEach((name) => addResourceItem(name, true));
             setKnowledgeOpen(false);
           }}
         />
@@ -1382,7 +1382,7 @@ export function SolveView({
             onClose={() => setPopupKnowledgeOpen(false)}
             folderId={folderId}
             onSelectMultiple={(fileNames) => {
-              fileNames.forEach((name) => addPopupResource(name));
+              fileNames.forEach((name) => addPopupResource(name, true));
               setPopupKnowledgeOpen(false);
             }}
           />

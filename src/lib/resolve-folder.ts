@@ -5,16 +5,17 @@ import { generateInviteCode } from "@/lib/invite-code";
 
 /**
  * Resolves a folderId from the URL.
- * If "default", ensures a real default folder exists for the user in the DB.
- * Returns the real UUID folder ID.
+ * If "default", finds the user's "My folder" if it exists.
+ * Only auto-creates a default folder if the user has NO folders at all.
+ * Returns the real UUID folder ID, or null if no folder should be used.
  */
 export async function resolveFolder(
   folderId: string,
   userId: string
-): Promise<string> {
+): Promise<string | null> {
   if (folderId !== "default") return folderId;
 
-  // Check if user already has a default folder
+  // Check if user already has a "My folder"
   const [existing] = await db
     .select({ id: folders.id })
     .from(folders)
@@ -23,7 +24,17 @@ export async function resolveFolder(
 
   if (existing) return existing.id;
 
-  // Create a real default folder
+  // Check if user has ANY folders at all
+  const [anyFolder] = await db
+    .select({ id: folders.id })
+    .from(folders)
+    .where(eq(folders.ownerId, userId))
+    .limit(1);
+
+  // If user has other folders, don't auto-create "My folder"
+  if (anyFolder) return null;
+
+  // User has no folders at all — create the default one
   const [folder] = await db
     .insert(folders)
     .values({

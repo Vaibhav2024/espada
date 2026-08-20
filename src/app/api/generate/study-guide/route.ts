@@ -49,7 +49,9 @@ export async function POST(req: NextRequest) {
   // Priority 3: Fallback to folder knowledge (only if no explicit selection)
   if (!context && folderId && (!assetIds || assetIds.length === 0)) {
     const realFolderId = await resolveFolder(folderId, userId);
-    context = await getFolderContext(realFolderId);
+    if (realFolderId) {
+      context = await getFolderContext(realFolderId);
+    }
   }
 
   if (!context) {

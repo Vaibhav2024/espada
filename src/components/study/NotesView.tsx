@@ -97,9 +97,9 @@ export function NotesEditor({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const addResourceItem = (name: string, assetId?: string) => {
+  const addResourceItem = (name: string, assetId?: string, alreadyReady?: boolean) => {
     const newId = `res-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
-    const newRes: Resource = { id: newId, name, loading: !assetId };
+    const newRes: Resource = { id: newId, name, loading: !(assetId || alreadyReady) };
     setResources((prev) => [...prev, newRes]);
     if (assetId) {
       setSelectedAssetIds((prev) => [...prev, assetId]);
@@ -164,13 +164,15 @@ export function NotesEditor({
 
   const handleSelectMultipleKnowledge = (fileNames: string[]) => {
     fileNames.forEach((fileName) => {
-      addResourceItem(fileName);
+      addResourceItem(fileName, undefined, true);
     });
     setAddMenuOpen(false);
   };
 
   const handleSelectWithAssets = (items: { name: string; assetId: string }[]) => {
-    setSelectedAssetIds((prev) => [...prev, ...items.map((i) => i.assetId)]);
+    items.forEach((item) => {
+      addResourceItem(item.name, item.assetId);
+    });
   };
 
   const handleRemoveResource = (id: string) => {

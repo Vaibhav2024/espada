@@ -479,9 +479,9 @@ export function WriteView({
   };
 
   // Form Methods
-  const addResourceItem = (name: string) => {
+  const addResourceItem = (name: string, alreadyReady?: boolean) => {
     const newId = `res-${Date.now()}`;
-    setResources((prev) => [...prev, { id: newId, name, loading: true }]);
+    setResources((prev) => [...prev, { id: newId, name, loading: !alreadyReady }]);
     return newId;
   };
 
@@ -1364,7 +1364,7 @@ export function WriteView({
           onClose={() => setKnowledgeOpen(false)}
           folderId={folderId}
           onSelectMultiple={(fileNames) => {
-            fileNames.forEach((name) => addResourceItem(name));
+            fileNames.forEach((name) => addResourceItem(name, true));
             setKnowledgeOpen(false);
           }}
         />
