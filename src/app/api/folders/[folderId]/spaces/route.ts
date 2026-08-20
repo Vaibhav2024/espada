@@ -11,6 +11,8 @@ interface RouteParams {
 
 /**
  * GET /api/folders/:folderId/spaces — List spaces within a folder.
+ * For non-owners: only returns shared spaces + spaces they created.
+ * Private spaces of OTHER users are hidden.
  */
 export async function GET(_req: NextRequest, { params }: RouteParams) {
   const userId = await requireAuth();
@@ -21,10 +23,25 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     return NextResponse.json([]);
   }
 
+  // Check if user is the folder owner
+  const [folder] = await db
+    .select({ ownerId: folders.ownerId })
+    .from(folders)
+    .where(eq(folders.id, realFolderId))
+    .limit(1);
+
   const folderSpaces = await db
     .select()
     .from(spaces)
     .where(eq(spaces.folderId, realFolderId));
+
+  // Owner sees everything; members only see shared spaces + their own private spaces
+  if (folder && folder.ownerId !== userId) {
+    const filtered = folderSpaces.filter(
+      (s) => s.category === "shared" || s.createdBy === userId
+    );
+    return NextResponse.json(filtered);
+  }
 
   return NextResponse.json(folderSpaces);
 }

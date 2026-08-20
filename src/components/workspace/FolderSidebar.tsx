@@ -16,6 +16,7 @@ import {
   Trash2,
   Edit2,
   Users,
+  ArrowRight,
 } from "lucide-react";
 import * as Lucide from "lucide-react";
 import { useState, useEffect, useRef } from "react";
@@ -59,6 +60,7 @@ export function FolderSidebar({
   onSelectSpace,
   onRenameSpace,
   onDeleteSpace,
+  onMoveSpace,
   folderName = "My folder",
   folderIconName = "Folder",
   folderThemeColor = "#a1a1aa",
@@ -78,6 +80,7 @@ export function FolderSidebar({
   onSelectSpace?: (id: string) => void;
   onRenameSpace?: (id: string, newName: string) => void;
   onDeleteSpace?: (id: string) => void;
+  onMoveSpace?: (id: string, newCategory: "shared" | "private") => void;
   folderName?: string;
   folderIconName?: string;
   folderThemeColor?: string;
@@ -281,7 +284,16 @@ export function FolderSidebar({
 
         {/* Private Spaces Section */}
         <div>
-          <p className="text-sm font-semibold text-muted-foreground mb-1.5">Private</p>
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-sm font-semibold text-muted-foreground">Private</p>
+            <button
+              onClick={onNewPrivateSpace}
+              aria-label="New private space"
+              className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              <Plus size={15} />
+            </button>
+          </div>
           {privateSpaces.length > 0 ? (
             privateSpaces.map(renderSpaceButton)
           ) : (
@@ -311,7 +323,7 @@ export function FolderSidebar({
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.1 }}
             style={{ top: contextMenu.y, left: contextMenu.x }}
-            className="fixed z-50 w-[140px] rounded-xl border border-border bg-[#1c1c1f] p-1.5 shadow-2xl"
+            className="fixed z-50 w-[180px] rounded-xl border border-border bg-[#1c1c1f] p-1.5 shadow-2xl"
           >
             <button
               onClick={() => {
@@ -337,6 +349,24 @@ export function FolderSidebar({
               <Trash2 size={13} />
               Delete
             </button>
+            {/* Move to Private / Move to Spaces */}
+            {(() => {
+              const space = spaces.find((s) => s.id === contextMenu.spaceId);
+              if (!space || !onMoveSpace) return null;
+              const isPrivate = space.category === "private";
+              return (
+                <button
+                  onClick={() => {
+                    onMoveSpace(contextMenu.spaceId, isPrivate ? "shared" : "private");
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-foreground hover:bg-[#27272a] transition-colors"
+                >
+                  <ArrowRight size={13} className="text-muted-foreground" />
+                  {isPrivate ? "Move to Spaces" : "Move to Private Space"}
+                </button>
+              );
+            })()}
           </motion.div>
         )}
       </AnimatePresence>

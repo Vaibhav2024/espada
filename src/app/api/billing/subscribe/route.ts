@@ -10,6 +10,62 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET!,
 });
 
+// Cache created plan IDs in memory (persists across requests in same process)
+let cachedMonthlyPlanId: string | null = null;
+let cachedAnnuallyPlanId: string | null = null;
+
+/**
+ * Ensure a Razorpay Plan exists. Uses env var if set, otherwise creates one.
+ */
+async function ensurePlanId(billingCycle: "monthly" | "annually"): Promise<string> {
+  // Check env vars first
+  if (billingCycle === "monthly" && process.env.RAZORPAY_PLAN_MONTHLY) {
+    return process.env.RAZORPAY_PLAN_MONTHLY;
+  }
+  if (billingCycle === "annually" && process.env.RAZORPAY_PLAN_ANNUALLY) {
+    return process.env.RAZORPAY_PLAN_ANNUALLY;
+  }
+
+  // Check in-memory cache
+  if (billingCycle === "monthly" && cachedMonthlyPlanId) return cachedMonthlyPlanId;
+  if (billingCycle === "annually" && cachedAnnuallyPlanId) return cachedAnnuallyPlanId;
+
+  // Create plan on-the-fly (test mode)
+  // Monthly: ₹668.44/mo ($7.99), Annually: ₹5726.32/yr ($68.50)
+  const planOptions = billingCycle === "monthly"
+    ? {
+        period: "monthly" as const,
+        interval: 1,
+        item: {
+          name: "Espada Pro Monthly",
+          amount: 66844, // ₹668.44 in paise
+          currency: "INR",
+          description: "Espada Pro - Monthly subscription",
+        },
+      }
+    : {
+        period: "yearly" as const,
+        interval: 1,
+        item: {
+          name: "Espada Pro Annual",
+          amount: 572632, // ₹5726.32 in paise
+          currency: "INR",
+          description: "Espada Pro - Annual subscription",
+        },
+      };
+
+  const plan = await razorpay.plans.create(planOptions as unknown as Parameters<typeof razorpay.plans.create>[0]);
+
+  // Cache the created plan ID
+  if (billingCycle === "monthly") {
+    cachedMonthlyPlanId = plan.id;
+  } else {
+    cachedAnnuallyPlanId = plan.id;
+  }
+
+  return plan.id;
+}
+
 /**
  * POST /api/billing/subscribe — Create a Razorpay Subscription for Pro plan.
  *
@@ -29,19 +85,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Look up or create a Razorpay plan ID.
-  // In production these would be pre-created in the Razorpay dashboard and
-  // stored as env vars. Using env vars for plan IDs:
-  //   RAZORPAY_PLAN_MONTHLY=plan_xxx
-  //   RAZORPAY_PLAN_ANNUALLY=plan_yyy
-  const planId =
-    billingCycle === "monthly"
-      ? process.env.RAZORPAY_PLAN_MONTHLY!
-      : process.env.RAZORPAY_PLAN_ANNUALLY!;
-
-  if (!planId) {
+  let planId: string;
+  try {
+    planId = await ensurePlanId(billingCycle);
+  } catch (err) {
+    console.error("[billing] Failed to get/create plan:", err);
     return NextResponse.json(
-      { error: `Razorpay plan ID not configured for ${billingCycle}` },
+      { error: "Failed to initialize payment plan. Please try again." },
       { status: 500 }
     );
   }

@@ -647,7 +647,50 @@ export default function Dashboard() {
     setFolderOpen(true);
   };
 
-  const handleAskEspada = (text: string) => {
+  const handleAskEspada = async (text: string) => {
+    const folderId = activeFolderId || undefined;
+
+    // Create a real chat space via API so it gets a proper spaceId for LLM calls
+    if (folderId) {
+      try {
+        const space = await apiCreateSpace(folderId, {
+          name: text.length > 25 ? text.slice(0, 25) + "..." : text,
+          type: "chat",
+          category: "private",
+          visibility: "me",
+        });
+        await apiUpdateSpace(space.id, { isConfigured: true }).catch(() => {});
+
+        const newSpace: Space = {
+          id: space.id,
+          name: space.name,
+          type: "chat",
+          category: "private",
+          visibility: "me",
+          isConfigured: true,
+          resources: [],
+          focusedResourceIds: [],
+          folderId: space.folderId,
+          initialMessages: [
+            {
+              id: `msg-${Date.now()}`,
+              sender: "user",
+              text,
+              timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            }
+          ]
+        };
+
+        setSpaces((prev) => [...prev, newSpace]);
+        setActiveSpaceId(space.id);
+        setFolderOpen(true);
+        return;
+      } catch (err) {
+        console.error("Failed to create chat space:", err);
+      }
+    }
+
+    // Fallback: local-only
     const newId = `space-${Date.now()}`;
     const newSpace: Space = {
       id: newId,
@@ -686,13 +729,20 @@ export default function Dashboard() {
           category: forcePrivate ? "private" : (toolId === "chat" ? "private" : "shared"),
           visibility: (forcePrivate || toolId === "chat") ? "me" : "members",
         });
+
+        // Recording and Chat are immediately configured (no wizard needed)
+        const immediatelyConfigured = ["recording", "chat"].includes(toolId);
+        if (immediatelyConfigured) {
+          await apiUpdateSpace(space.id, { isConfigured: true }).catch(() => {});
+        }
+
         const newSpace: Space = {
           id: space.id,
           name: space.name,
           type: space.type,
           category: space.category,
           visibility: space.visibility,
-          isConfigured: space.isConfigured,
+          isConfigured: immediatelyConfigured ? true : space.isConfigured,
           resources: [],
           focusedResourceIds: [],
           folderId: space.folderId,
@@ -716,7 +766,7 @@ export default function Dashboard() {
       type: toolId,
       category: forcePrivate ? "private" : (toolId === "chat" ? "private" : "shared"),
       visibility: (forcePrivate || toolId === "chat") ? "me" : "members",
-      isConfigured: toolId !== "quiz" && toolId !== "study-guide" && toolId !== "flashcards" && toolId !== "solve" && toolId !== "write" && toolId !== "notes",
+      isConfigured: ["recording", "chat"].includes(toolId) || (toolId !== "quiz" && toolId !== "study-guide" && toolId !== "flashcards" && toolId !== "solve" && toolId !== "write" && toolId !== "notes"),
       resources: [],
       focusedResourceIds: [],
       folderId: folderId,
@@ -911,8 +961,52 @@ export default function Dashboard() {
           />
         );
       } else {
-        // default/chat or other
-        mainContent = <Hub onOpen={handleSelectTool} onAskEspada={handleAskEspada} />;
+        // default/chat or other — recording and chat should never be unconfigured,
+        // but handle gracefully if they are
+        if (activeSpace.type === "recording") {
+          mainContent = (
+            <RecordingView
+              spaceName={activeSpace.name}
+              spaceId={activeSpace.id}
+              folderId={activeFolderId || undefined}
+              visibility={activeSpace.visibility}
+              onBack={handleBackToHub}
+            />
+          );
+        } else if (activeSpace.type === "chat") {
+          mainContent = (
+            <ChatView
+              spaceName={activeSpace.name}
+              spaceId={activeSpace.id}
+              folderId={activeFolderId || undefined}
+              resources={activeSpace.resources || []}
+              focusedResourceIds={activeSpace.focusedResourceIds || []}
+              onAddResource={(res) => {
+                setSpaces((prev) =>
+                  prev.map((s) =>
+                    s.id === activeSpace.id
+                      ? { ...s, resources: [...(s.resources || []), res] }
+                      : s
+                  )
+                );
+              }}
+              onRemoveResource={(resId) => {
+                setSpaces((prev) =>
+                  prev.map((s) =>
+                    s.id === activeSpace.id
+                      ? { ...s, resources: (s.resources || []).filter((r) => r.id !== resId) }
+                      : s
+                  )
+                );
+              }}
+              onToggleFocusResource={() => {}}
+              onUpdateResourceLoading={() => {}}
+              initialMessages={activeSpace.initialMessages}
+            />
+          );
+        } else {
+          mainContent = <Hub onOpen={handleSelectTool} onAskEspada={handleAskEspada} />;
+        }
       }
     } else {
       if (activeSpace.type === "study-guide") {
@@ -987,6 +1081,7 @@ export default function Dashboard() {
         mainContent = (
           <RecordingView
             spaceName={activeSpace.name}
+            spaceId={activeSpace.id}
             folderId={activeFolderId || undefined}
             visibility={activeSpace.visibility}
             initialDraft={activeSpace.plainTextContent}
@@ -1016,6 +1111,7 @@ export default function Dashboard() {
         mainContent = (
           <ChatView
             spaceName={activeSpace.name}
+            spaceId={activeSpace.id}
             folderId={activeFolderId || undefined}
             resources={activeSpace.resources || []}
             focusedResourceIds={activeSpace.focusedResourceIds || []}
@@ -1192,6 +1288,20 @@ export default function Dashboard() {
                   }
                   return curr;
                 });
+              }}
+              onMoveSpace={async (id, newCategory) => {
+                setSpaces((prev) =>
+                  prev.map((s) => (s.id === id ? { ...s, category: newCategory } : s))
+                );
+                try {
+                  await apiUpdateSpace(id, { category: newCategory });
+                } catch (err) {
+                  console.error("Failed to move space:", err);
+                  // Revert on failure
+                  setSpaces((prev) =>
+                    prev.map((s) => (s.id === id ? { ...s, category: newCategory === "shared" ? "private" : "shared" } : s))
+                  );
+                }
               }}
             />
           </div>
