@@ -1,23 +1,26 @@
 "use client";
 
-import { Suspense, useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { joinFolderByCode } from "@/lib/api";
 
-function JoinContent() {
+export default function JoinPage() {
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const hasSubmittedRef = useRef(false);
   const refs = useRef<Array<HTMLInputElement | null>>([]);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const submittedCodeRef = useRef<string>("");
 
-  const handleSubmit = useCallback(async (code: string) => {
-    if (hasSubmittedRef.current) return;
-    hasSubmittedRef.current = true;
+  // Handle the actual submission
+  async function doSubmit(code: string) {
+    // Don't re-submit the same code
+    if (submittedCodeRef.current === code) return;
+    submittedCodeRef.current = code;
+    
     setSubmitting(true);
     setError("");
 
@@ -33,61 +36,61 @@ function JoinContent() {
       } else {
         setError(message || "Failed to join folder");
       }
-      hasSubmittedRef.current = false;
       setSubmitting(false);
+      // Don't clear submittedCodeRef here — prevents re-submission of same bad code
     }
-  }, [router]);
+  }
 
-  // Pre-fill from URL param if present (e.g. /join?code=ABC123)
+  // Auto-submit from URL param on mount
   useEffect(() => {
     const codeParam = searchParams.get("code");
     if (codeParam && codeParam.length >= 6) {
-      // If code came from URL (copy link), submit it directly — it may be longer than 6 chars for legacy codes
-      const upperCode = codeParam.toUpperCase();
-      if (upperCode.length === 6) {
-        const chars = upperCode.split("");
-        setDigits(chars);
-      } else {
-        // For longer codes (legacy 8-char), show first 6 in UI but submit full code
-        const chars = upperCode.slice(0, 6).split("");
-        setDigits(chars);
-      }
-      // Auto-submit the full code from URL
-      setTimeout(() => {
-        handleSubmit(codeParam);
-      }, 300);
+      const displayChars = codeParam.slice(0, 6).toUpperCase().split("");
+      setDigits(displayChars);
+      doSubmit(codeParam);
     }
-  }, [searchParams, handleSubmit]);
-
-  // Auto-submit when all 6 digits are manually filled
-  useEffect(() => {
-    const code = digits.join("");
-    if (code.length === 6 && digits.every((d) => d !== "") && !submitting && !hasSubmittedRef.current) {
-      handleSubmit(code);
-    }
-  }, [digits, handleSubmit, submitting]);
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const setDigit = (i: number, v: string) => {
     const c = v.replace(/[^a-zA-Z0-9]/g, "").slice(-1).toUpperCase();
-    setDigits((prev) => prev.map((d, idx) => (idx === i ? c : d)));
+    const newDigits = digits.map((d, idx) => (idx === i ? c : d));
+    setDigits(newDigits);
     setError("");
-    hasSubmittedRef.current = false; // Allow re-submit on new input
-    if (c && i < 5) refs.current[i + 1]?.focus();
+    // Allow re-submit with new code
+    submittedCodeRef.current = "";
+
+    if (c && i < 5) {
+      refs.current[i + 1]?.focus();
+    }
+
+    // Check if all 6 are filled and auto-submit
+    const code = newDigits.join("");
+    if (code.length === 6 && newDigits.every((d) => d !== "")) {
+      doSubmit(code);
+    }
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
     const pasted = e.clipboardData.getData("text").replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 6);
-    if (pasted.length > 0) {
+    if (pasted.length === 6) {
+      const newDigits = pasted.split("");
+      setDigits(newDigits);
+      setError("");
+      submittedCodeRef.current = "";
+      doSubmit(pasted);
+    } else if (pasted.length > 0) {
       const newDigits = ["", "", "", "", "", ""];
-      for (let i = 0; i < pasted.length && i < 6; i++) {
+      for (let i = 0; i < pasted.length; i++) {
         newDigits[i] = pasted[i];
       }
       setDigits(newDigits);
-      hasSubmittedRef.current = false;
+      setError("");
+      submittedCodeRef.current = "";
       const nextEmpty = newDigits.findIndex((d) => !d);
-      const focusIdx = nextEmpty === -1 ? 5 : nextEmpty;
-      refs.current[focusIdx]?.focus();
+      if (nextEmpty !== -1) refs.current[nextEmpty]?.focus();
     }
   };
 
@@ -128,34 +131,18 @@ function JoinContent() {
         ))}
       </div>
 
-      {/* Error message */}
       {error && (
-        <p className="mt-4 text-sm font-semibold text-red-400 animate-in fade-in slide-in-from-bottom-2">
+        <p className="mt-4 text-sm font-semibold text-red-400">
           {error}
         </p>
       )}
 
-      {/* Loading indicator */}
-      {submitting && (
+      {submitting && !error && (
         <div className="mt-6 flex items-center gap-2">
           <div className="w-4 h-4 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
           <span className="text-sm text-muted-foreground">Joining folder...</span>
         </div>
       )}
     </div>
-  );
-}
-
-export default function JoinPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center bg-background">
-          <div className="w-6 h-6 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
-        </div>
-      }
-    >
-      <JoinContent />
-    </Suspense>
   );
 }
