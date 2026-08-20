@@ -786,41 +786,85 @@ export function RecordingView({
       return;
     }
 
-    // Make ONE LLM call to process transcript into structured notes
+    // Use streaming polish endpoint for real-time display in editor
     try {
-      const res = await fetch("/api/generate/recording", {
+      const response = await fetch("/api/notes/polish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           spaceId,
-          rawTranscript,
-          transcriptSegments: segments,
+          rawText: rawTranscript,
         }),
       });
 
-      if (res.ok) {
-        const { lines: newLines } = await res.json();
-        // Append generated notes to the document
-        if (newLines && newLines.length > 0) {
+      if (response.ok && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = "";
+
+        // Add a placeholder line that we'll keep updating
+        const placeholderId = `gen-stream-${Date.now()}`;
+        setLines((prevLines) => {
+          const isEmptyOnly =
+            prevLines.length <= 2 &&
+            prevLines.every((l) => !l.text.trim() || l.text === "New Lecture Notes");
+          const placeholder: DocLine = { id: placeholderId, text: "...", type: "plain" };
+          return isEmptyOnly ? [placeholder] : [...prevLines, placeholder];
+        });
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          fullText += chunk;
+
+          // Parse streamed text into lines and update editor in real-time
+          const streamedLines = fullText.split("\n").filter(Boolean);
+          const parsedLines: DocLine[] = streamedLines.map((line, idx) => {
+            let type: DocLine["type"] = "plain";
+            let text = line;
+            if (line.startsWith("### ")) { type = "h3"; text = line.slice(4); }
+            else if (line.startsWith("## ")) { type = "h2"; text = line.slice(3); }
+            else if (line.startsWith("# ")) { type = "h1"; text = line.slice(2); }
+            else if (line.startsWith("- ") || line.startsWith("• ")) { type = "bullet"; text = line.slice(2); }
+            else if (line.startsWith("> ")) { type = "quote"; text = line.slice(2); }
+            return { id: `gen-${Date.now()}-${idx}`, text, type };
+          });
+
           setLines((prevLines) => {
-            const isEmptyOnly =
-              prevLines.length <= 2 &&
-              prevLines.every((l) => !l.text.trim() || l.text === "New Lecture Notes");
-            const generated: DocLine[] = newLines.map(
-              (nl: { type: string; text: string; tableData?: unknown }, idx: number) => ({
-                id: `gen-${Date.now()}-${idx}`,
-                text: nl.text,
-                type: nl.type as DocLine["type"],
-                tableData: nl.tableData,
-              })
+            // Remove the placeholder and previous generated lines from this stream
+            const base = prevLines.filter(
+              (l) => l.id !== placeholderId && !l.id.startsWith("gen-stream-line-")
             );
-            const updated = isEmptyOnly ? generated : [...prevLines, ...generated];
-            setTimeout(() => commitLinesToHistory(updated), 50);
-            return updated;
+            const withGenerated = [
+              ...base,
+              ...parsedLines.map((l, i) => ({ ...l, id: `gen-stream-line-${i}` })),
+            ];
+            return withGenerated;
           });
         }
+
+        // Final commit — replace stream IDs with stable IDs
+        setLines((prevLines) => {
+          const final = prevLines.map((l, i) =>
+            l.id.startsWith("gen-stream-line-")
+              ? { ...l, id: `gen-final-${Date.now()}-${i}` }
+              : l
+          );
+          setTimeout(() => commitLinesToHistory(final), 50);
+          return final;
+        });
+
+        // Also save transcript segments to the space
+        if (segments.length > 0) {
+          fetch(`/api/spaces/${spaceId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ isConfigured: true }),
+          }).catch(() => {});
+        }
       } else {
-        console.error("[Recording] LLM call failed:", res.status);
+        console.error("[Recording] LLM call failed:", response.status);
       }
     } catch (err) {
       console.error("[Recording] LLM call error:", err);
@@ -1109,14 +1153,14 @@ export function RecordingView({
           </div>
         </div>
 
-        {/* "ESPADA IS TAKING NOTES" FLOATING PILL — shown only when recording */}
+        {/* "ESPADA IS TAKING NOTES" FLOATING PILL — shown when recording or processing */}
         <AnimatePresence>
-          {recordingState === "recording" && (
+          {(recordingState === "recording" || recordingState === "stopping") && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
-              className="absolute bottom-[72px] left-1/2 -translate-x-1/2 flex items-center gap-2 bg-[#1c1c1f]/95 border border-border/60 rounded-full px-3.5 py-1.5 shadow-xl z-40 backdrop-blur-sm"
+              className="absolute bottom-[120px] left-1/2 -translate-x-1/2 flex items-center gap-2 bg-[#1c1c1f]/95 border border-border/60 rounded-full px-3.5 py-1.5 shadow-xl z-40 backdrop-blur-sm"
             >
               {/* Animated dots */}
               <div className="flex items-center gap-[3px]">
