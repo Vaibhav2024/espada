@@ -102,7 +102,7 @@ export function MembersPanel({ folderId, inviteCode, ownerId, onClose, onMemberR
   };
 
   return (
-    <div className="relative flex h-full w-[350px] flex-col border-r border-border bg-[#0d0d0e]">
+    <div className="relative flex h-full w-full md:w-[350px] flex-col border-r border-border bg-[#0d0d0e]">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-6 py-4">
         <div className="flex items-center gap-2">

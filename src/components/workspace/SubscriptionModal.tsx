@@ -76,7 +76,7 @@ export function SubscriptionModal({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 20, scale: 0.98 }}
         transition={{ type: "spring", duration: 0.4 }}
-        className="relative z-10 w-full max-w-[840px] rounded-[24px] border border-border bg-[#0d0d0e] p-5 md:py-6 md:px-7 shadow-3xl max-h-[95vh] flex flex-col overflow-hidden"
+        className="relative z-10 w-full max-w-[840px] sm:rounded-[24px] border border-border bg-[#0d0d0e] p-5 md:py-6 md:px-7 shadow-3xl max-h-[95dvh] flex flex-col overflow-hidden"
       >
         {/* Close Button */}
         <button

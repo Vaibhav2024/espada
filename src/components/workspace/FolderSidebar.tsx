@@ -3,6 +3,7 @@ import {
   FolderClosed,
   History,
   MessageSquare,
+  MoreVertical,
   PanelLeft,
   Plus,
   User,
@@ -162,19 +163,34 @@ export function FolderSidebar({
   const renderSpaceButton = (space: Space) => {
     const isActive = space.id === activeSpaceId;
     return (
-      <button
+      <div
         key={space.id}
-        onClick={() => onSelectSpace && onSelectSpace(space.id)}
-        onContextMenu={(e) => handleContextMenu(e, space.id)}
-        className={`mt-1.5 flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-colors text-left ${
-          isActive
-            ? "bg-secondary text-foreground"
-            : "text-foreground hover:bg-secondary/40"
+        className={`group mt-1.5 flex w-full items-center gap-2.5 rounded-xl text-sm font-semibold transition-colors text-left ${
+          isActive ? "bg-secondary" : "hover:bg-secondary/40"
         }`}
       >
-        {getSpaceIcon(space.type)}
-        <span className="truncate flex-1">{space.name}</span>
-      </button>
+        <button
+          onClick={() => onSelectSpace && onSelectSpace(space.id)}
+          onContextMenu={(e) => handleContextMenu(e, space.id)}
+          className={`flex flex-1 min-w-0 items-center gap-2.5 px-3.5 py-2.5 text-left ${
+            isActive ? "text-foreground" : "text-foreground"
+          }`}
+        >
+          {getSpaceIcon(space.type)}
+          <span className="truncate flex-1">{space.name}</span>
+        </button>
+        {/* Kebab button: always visible on mobile, hover-only on desktop */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleContextMenu(e as unknown as React.MouseEvent, space.id);
+          }}
+          aria-label="Space options"
+          className="shrink-0 mr-1.5 flex size-7 items-center justify-center rounded-lg text-muted-foreground opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-secondary/60 hover:text-foreground transition-all"
+        >
+          <MoreVertical size={14} />
+        </button>
+      </div>
     );
   };
 

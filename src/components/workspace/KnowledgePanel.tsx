@@ -182,7 +182,7 @@ export function KnowledgePanel({
   };
 
   return (
-    <div className="relative flex h-full w-[350px] flex-col border-r border-border bg-[#0d0d0e] select-none">
+    <div className="relative flex h-full w-full md:w-[350px] flex-col border-r border-border bg-[#0d0d0e] select-none">
       <input
         type="file"
         ref={fileInputRef}

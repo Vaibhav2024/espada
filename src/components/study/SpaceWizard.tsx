@@ -89,7 +89,7 @@ export function ToolSelectorModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
         transition={{ duration: 0.2, ease: "easeOut" }}
-        className="relative z-10 w-full max-w-[680px] overflow-hidden rounded-[24px] border border-border bg-[#18181b] p-6 shadow-2xl"
+        className="relative z-10 w-full max-w-[680px] overflow-hidden sm:rounded-[24px] border border-border bg-[#18181b] p-6 shadow-2xl sm:m-4"
       >
         <div className="flex items-center justify-between pb-2 border-b border-border">
           <div className="text-sm text-muted-foreground">Select a tool for this space</div>

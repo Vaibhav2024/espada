@@ -106,7 +106,7 @@ export function CreateFolderDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[500px] gap-0 rounded-3xl border-border bg-popover p-8 z-50">
+      <DialogContent className="w-[calc(100%-2rem)] max-w-[500px] gap-0 sm:rounded-3xl rounded-2xl border-border bg-popover p-6 sm:p-8 z-50">
         <DialogHeader>
           <DialogTitle className="text-2xl font-semibold tracking-tight">Create folder</DialogTitle>
         </DialogHeader>

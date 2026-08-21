@@ -132,6 +132,8 @@ export function SolveView({
 
   // Collapsible Chat State
   const [chatCollapsed, setChatCollapsed] = useState(false);
+  // Mobile tab toggle: 'solve' shows main content, 'chat' shows the side chat panel
+  const [mobileTab, setMobileTab] = useState<"solve" | "chat">("solve");
   
   // Problems database state
   const [problems, setProblems] = useState<SolveProblem[]>([]);
@@ -762,9 +764,31 @@ export function SolveView({
   const activeProblem = problems.find((p) => p.id === activeProblemId) || problems[0];
 
   return (
-    <div className="flex bg-[#0c0c0d] h-full w-full select-none text-left overflow-hidden">
+    <div className="flex flex-col bg-[#0c0c0d] h-full w-full select-none text-left overflow-hidden">
+      {/* Mobile tab bar (hidden on md+) */}
+      <div className="md:hidden flex shrink-0 border-b border-border/40 bg-[#131315]/50">
+        <button
+          onClick={() => setMobileTab("solve")}
+          className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors ${
+            mobileTab === "solve" ? "text-foreground border-b-2 border-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Solve
+        </button>
+        <button
+          onClick={() => setMobileTab("chat")}
+          className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors ${
+            mobileTab === "chat" ? "text-foreground border-b-2 border-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Chat
+        </button>
+      </div>
+      <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* ── LEFT SIDEBAR (PROBLEMS LIST) ── */}
-      <div className="w-[220px] shrink-0 border-r border-border/40 flex flex-col bg-[#131315]/50">
+      <div className={`w-[220px] shrink-0 border-r border-border/40 flex flex-col bg-[#131315]/50 ${
+        mobileTab === "chat" ? "hidden md:flex" : "flex"
+      }`}>
         <div className="p-4 border-b border-border/20 flex items-center justify-between">
           <span className="text-xs font-bold text-foreground/80 uppercase tracking-wider">Problems</span>
           <button
@@ -961,7 +985,9 @@ export function SolveView({
 
       {/* ── RIGHT PANEL (ESPADA CHAT PANEL) ── */}
       {!chatCollapsed && (
-        <div className="w-[300px] shrink-0 flex flex-col bg-[#131315]/30 border-l border-border/40">
+        <div className={`w-full md:w-[300px] shrink-0 flex flex-col bg-[#131315]/30 border-l border-border/40 ${
+          mobileTab === "chat" ? "flex" : "hidden md:flex"
+        }`}>
           <div className="p-4 border-b border-border/20 flex items-center justify-between bg-[#131315]/40">
             <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Chat with Espada</span>
           </div>
@@ -1195,6 +1221,8 @@ export function SolveView({
           </div>
         </div>
       )}
+
+      </div>{/* end flex-1 overflow-hidden row */}
 
       {/* ── POPUP WIZARD OVERLAY: ADD MORE PROBLEMS ── */}
       {showAddPopup && mounted && createPortal(

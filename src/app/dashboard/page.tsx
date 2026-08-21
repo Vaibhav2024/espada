@@ -7,6 +7,7 @@ import { UserButton } from "@clerk/nextjs";
 import {
   BookOpen,
   ChevronRight,
+  ChevronLeft,
   Folder,
   FolderOpen,
   Home,
@@ -16,6 +17,7 @@ import {
   ListOrdered,
   Mic,
   MessageSquare,
+  Menu,
   PenTool,
   Plus,
   PlusCircle,
@@ -24,6 +26,7 @@ import {
   Ticket,
   ArrowUpCircle,
   FileText,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import * as Lucide from "lucide-react";
@@ -624,6 +627,10 @@ export default function Dashboard() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [showKnowledge, setShowKnowledge] = useState(false);
+  // Mobile-specific state
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [mobilePanelView, setMobilePanelView] = useState<"members" | "knowledge" | null>(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Dynamic spaces state
   const [spaces, setSpaces] = useState<Space[]>([]);
@@ -1208,8 +1215,357 @@ export default function Dashboard() {
 
   const finalMainContent = activeFolderId ? mainContent : <div className="h-full w-full bg-[#18181b]" />;
 
+  const activeFolderName = activeFolderId === "default"
+    ? defaultFolderName
+    : (folders.find((f) => f.id === activeFolderId)?.name ?? "My folder");
+
+  const folderSidebarProps = {
+    collapsed: sidebarCollapsed,
+    onToggle: () => setSidebarCollapsed((v) => !v),
+    onNewSpace: handleNewSpace,
+    onNewPrivateSpace: handleNewPrivateSpace,
+    onMembersToggle: () => {
+      setShowMembers((prev) => !prev);
+      setShowKnowledge(false);
+      setMobilePanelView((prev) => prev === "members" ? null : "members");
+    },
+    isMembersOpen: showMembers,
+    onKnowledgeToggle: () => {
+      setShowKnowledge((prev) => !prev);
+      setShowMembers(false);
+      setMobilePanelView((prev) => prev === "knowledge" ? null : "knowledge");
+    },
+    isKnowledgeOpen: showKnowledge,
+    spaces: filteredSpaces,
+    folderName: activeFolderId === "default" ? defaultFolderName : (activeFolder ? activeFolder.name : "My folder"),
+    folderIconName: activeFolderId === "default" ? defaultFolderIconName : (activeFolder ? activeFolder.iconName : "Folder"),
+    folderThemeColor: activeFolderId === "default" ? defaultFolderThemeColor : (activeFolder ? activeFolder.themeColor : "#a1a1aa"),
+    knowledgeCount: knowledgeItems.filter((k) => (k.folderId || "default") === activeFolderId).length,
+    memberCount,
+    activeSpaceId,
+    onSelectSpace: (id: string) => {
+      if (activeSpaceId && activeSpaceId !== id) {
+        const prevSpace = spaces.find((s) => s.id === activeSpaceId);
+        if (prevSpace && !prevSpace.isConfigured) {
+          setSpaces((prev) => prev.filter((s) => s.id !== activeSpaceId));
+          apiDeleteSpace(activeSpaceId).catch(() => {});
+        }
+      }
+      setActiveSpaceId(id);
+      setActiveTool(null);
+      setMobileDrawerOpen(false);
+      setMobilePanelView(null);
+      setMobileSidebarOpen(false);
+      const space = spaces.find((s) => s.id === id);
+      if (space && !space.isConfigured) {
+        if (space.type === "default") {
+          setShowToolSelector(true);
+          setShowQuizWizard(false);
+        } else if (space.type === "quiz") {
+          setShowQuizWizard(true);
+          setShowToolSelector(false);
+        }
+      } else {
+        setShowToolSelector(false);
+        setShowQuizWizard(false);
+      }
+    },
+    onRenameSpace: async (id: string, newName: string) => {
+      try {
+        await apiUpdateSpace(id, { name: newName });
+      } catch (err) {
+        console.error("Failed to rename space:", err);
+      }
+      setSpaces((prev) => prev.map((s) => (s.id === id ? { ...s, name: newName } : s)));
+    },
+    onDeleteSpace: async (id: string) => {
+      try {
+        await apiDeleteSpace(id);
+      } catch (err) {
+        console.error("Failed to delete space:", err);
+      }
+      setSpaces((prev) => prev.filter((s) => s.id !== id));
+      setActiveSpaceId((curr) => {
+        if (curr === id) {
+          setActiveTool(null);
+          return null;
+        }
+        return curr;
+      });
+    },
+    onMoveSpace: async (id: string, newCategory: "shared" | "private") => {
+      setSpaces((prev) => prev.map((s) => (s.id === id ? { ...s, category: newCategory } : s)));
+      try {
+        await apiUpdateSpace(id, { category: newCategory });
+      } catch (err) {
+        console.error("Failed to move space:", err);
+        setSpaces((prev) => prev.map((s) => (s.id === id ? { ...s, category: newCategory === "shared" ? "private" : "shared" } : s)));
+      }
+    },
+  };
+
+  const membersPanelEl = (
+    <MembersPanel
+      folderId={activeFolderId || undefined}
+      inviteCode={activeFolder?.inviteCode}
+      ownerId={activeFolder?.ownerId}
+      onClose={() => {
+        setShowMembers(false);
+        setMobilePanelView(null);
+      }}
+      onMemberRemoved={() => {
+        if (activeFolderId && activeFolderId !== "default") {
+          fetchFolderMembers(activeFolderId)
+            .then((m) => setMemberCount(m.length))
+            .catch(() => {});
+        }
+      }}
+    />
+  );
+
+  const knowledgePanelEl = (
+    <KnowledgePanel
+      onClose={() => {
+        setShowKnowledge(false);
+        setMobilePanelView(null);
+      }}
+      items={knowledgeItems.filter((k) => (k.folderId || "default") === activeFolderId)}
+      folderId={activeFolderId || undefined}
+      onAddItem={(name, type, assetId, status) => {
+        const newItem: KnowledgeItem = {
+          id: `k-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
+          name,
+          type,
+          folderId: activeFolderId || "",
+          status: (status as KnowledgeItem["status"]) || "queued",
+          assetId,
+        };
+        setKnowledgeItems((prev) => [...prev, newItem]);
+      }}
+      onUpdateItemStatus={(id, status) => {
+        setKnowledgeItems((prev) => prev.map((k) => (k.id === id ? { ...k, status } : k)));
+      }}
+      onRefresh={() => {
+        if (activeFolderId) {
+          fetchKnowledgeItems(activeFolderId).then((items) => {
+            const mapped: KnowledgeItem[] = items.map((item) => ({
+              id: item.id,
+              name: item.asset.name,
+              type: item.asset.type === "link" ? "link" as const : "file" as const,
+              folderId: activeFolderId,
+              status: item.asset.status as KnowledgeItem["status"],
+              assetId: item.assetId,
+            }));
+            setKnowledgeItems((prev) => {
+              const others = prev.filter((k) => k.folderId !== activeFolderId);
+              return [...others, ...mapped];
+            });
+          }).catch(() => {});
+          fetchFolders().then((apiFolders) => {
+            const foldersMapped = apiFolders.map((f) => ({
+              id: f.id, name: f.name, themeName: f.themeName,
+              themeColor: f.themeColor, iconName: f.iconName, isPublic: f.isPublic, inviteCode: f.inviteCode, ownerId: f.ownerId,
+            }));
+            const autoCreated = foldersMapped.find((f) => f.name === "My folder");
+            if (autoCreated && hasDefaultFolder) {
+              setHasDefaultFolder(false);
+              setFolders(foldersMapped);
+              setActiveFolderId(autoCreated.id);
+            } else if (foldersMapped.length > 0) {
+              setFolders(foldersMapped);
+            }
+          }).catch(() => {});
+        }
+      }}
+    />
+  );
+
   return (
-    <div className="flex h-screen overflow-hidden bg-black text-foreground">
+    <div className="flex h-[100dvh] overflow-hidden bg-black text-foreground">
+      {/* ── Mobile Header (hidden on md+) ── */}
+      <header className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 h-14 bg-black/95 backdrop-blur-sm border-b border-border">
+        <button
+          onClick={() => setMobileDrawerOpen(true)}
+          aria-label="Open menu"
+          className="flex size-9 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+        >
+          <Menu size={20} />
+        </button>
+        {activeFolderId ? (
+          <button
+            onClick={() => setMobileSidebarOpen(true)}
+            className="flex items-center gap-1.5 text-sm font-semibold text-foreground hover:text-muted-foreground transition-colors truncate max-w-[160px]"
+          >
+            <ChevronLeft size={16} className="shrink-0 text-muted-foreground" />
+            <span className="truncate">{activeFolderName}</span>
+          </button>
+        ) : (
+          <span className="text-sm font-semibold text-foreground">Espada</span>
+        )}
+        <UserButton
+          appearance={{
+            elements: {
+              avatarBox: "w-[34px] h-[34px] rounded-[10px]",
+              userButtonTrigger: "focus:shadow-none",
+            },
+          }}
+        />
+      </header>
+
+      {/* ── Mobile Drawer Overlay ── */}
+      <AnimatePresence>
+        {mobileDrawerOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="mobile-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="md:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+              onClick={() => setMobileDrawerOpen(false)}
+            />
+            {/* Drawer panel */}
+            <motion.div
+              key="mobile-drawer"
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", stiffness: 320, damping: 32 }}
+              className="md:hidden fixed top-0 left-0 bottom-0 z-50 flex w-[300px] flex-col bg-black"
+            >
+              {/* Drawer header */}
+              <div className="flex items-center justify-between px-4 h-14 border-b border-border shrink-0">
+                <span className="text-sm font-semibold text-foreground">Menu</span>
+                <button
+                  onClick={() => setMobileDrawerOpen(false)}
+                  aria-label="Close menu"
+                  className="flex size-9 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Rail items in drawer */}
+              <div className="flex flex-col px-3 py-4 gap-1 border-b border-border shrink-0">
+                <button
+                  onClick={() => { handleBackToHub(); setMobileDrawerOpen(false); }}
+                  className="flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-sm font-semibold text-foreground hover:bg-secondary/60 transition-colors"
+                >
+                  <Home size={17} />
+                  Home
+                </button>
+                <button
+                  onClick={() => { setCreateOpen(true); setMobileDrawerOpen(false); }}
+                  className="flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-sm font-semibold text-foreground hover:bg-secondary/60 transition-colors"
+                >
+                  <PlusCircle size={17} />
+                  New folder
+                </button>
+                <button
+                  onClick={() => { router.push("/join"); setMobileDrawerOpen(false); }}
+                  className="flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-sm font-semibold text-foreground hover:bg-secondary/60 transition-colors"
+                >
+                  <Ticket size={17} />
+                  Join from invite code
+                </button>
+              </div>
+
+              {/* Folder list in drawer */}
+              <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
+                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Folders</p>
+                {hasDefaultFolder && (
+                  <button
+                    onClick={() => { handleSelectFolder("default"); setMobileDrawerOpen(false); }}
+                    className={`flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors ${
+                      activeFolderId === "default" ? "bg-secondary text-foreground" : "text-foreground hover:bg-secondary/40"
+                    }`}
+                  >
+                    {(() => {
+                      const Icon = (Lucide as any)[defaultFolderIconName] || FolderOpen;
+                      return <Icon size={16} style={{ color: defaultFolderThemeColor }} />;
+                    })()}
+                    {defaultFolderName}
+                  </button>
+                )}
+                {folders.map((folder) => {
+                  const FolderIcon = (Lucide as any)[folder.iconName] || Lucide.Folder;
+                  const isActive = activeFolderId === folder.id;
+                  return (
+                    <button
+                      key={folder.id}
+                      onClick={() => { handleSelectFolder(folder.id); setMobileDrawerOpen(false); }}
+                      className={`flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors ${
+                        isActive ? "bg-secondary text-foreground" : "text-foreground hover:bg-secondary/40"
+                      }`}
+                    >
+                      <FolderIcon size={16} style={{ color: folder.themeColor }} />
+                      {folder.name}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Bottom actions in drawer */}
+              <div className="px-3 py-4 border-t border-border flex flex-col gap-2 shrink-0">
+                <button
+                  onClick={() => { setSubscriptionOpen(true); setMobileDrawerOpen(false); }}
+                  className="flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-sm font-semibold text-foreground hover:bg-secondary/60 transition-colors"
+                >
+                  <ArrowUpCircle size={17} className="text-orange-400" />
+                  Upgrade to Pro
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ── Mobile FolderSidebar Overlay ── */}
+      <AnimatePresence>
+        {mobileSidebarOpen && activeFolderId && (
+          <>
+            <motion.div
+              key="mobile-sidebar-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+              onClick={() => setMobileSidebarOpen(false)}
+            />
+            <motion.div
+              key="mobile-sidebar"
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", stiffness: 320, damping: 32 }}
+              className="md:hidden fixed top-14 left-0 bottom-0 z-40 flex flex-col bg-sidebar border-r border-border overflow-hidden"
+              style={{ width: "280px" }}
+            >
+              <FolderSidebar
+                {...folderSidebarProps}
+                onToggle={() => setMobileSidebarOpen(false)}
+                onMembersToggle={() => {
+                  setShowMembers((prev) => !prev);
+                  setShowKnowledge(false);
+                  setMobilePanelView((prev) => prev === "members" ? null : "members");
+                  setMobileSidebarOpen(false);
+                }}
+                onKnowledgeToggle={() => {
+                  setShowKnowledge((prev) => !prev);
+                  setShowMembers(false);
+                  setMobilePanelView((prev) => prev === "knowledge" ? null : "knowledge");
+                  setMobileSidebarOpen(false);
+                }}
+              />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ── Desktop Rail (hidden on mobile) ── */}
       <Rail
         folderOpen={folderOpen}
         onFolder={() => setFolderOpen((v) => !v)}
@@ -1229,175 +1585,38 @@ export default function Dashboard() {
       />
 
       {/* Floating rounded window container wrapping all content to the right of the Rail */}
-      <div className="flex-1 flex overflow-hidden rounded-[20px] border border-border bg-[#18181b] my-2 mr-2 ml-1 shadow-2xl">
+      {/* On mobile: occupies full width below the header bar */}
+      <div className="flex-1 flex overflow-hidden md:rounded-[20px] border border-border bg-[#18181b] md:my-2 md:mr-2 md:ml-1 shadow-2xl mt-14 md:mt-0">
+
+        {/* ── Mobile full-screen Members panel ── */}
+        {mobilePanelView === "members" && activeFolderId && (
+          <div className="md:hidden absolute inset-x-0 top-14 bottom-0 z-30 overflow-y-auto bg-[#0d0d0e]">
+            {membersPanelEl}
+          </div>
+        )}
+
+        {/* ── Mobile full-screen Knowledge panel ── */}
+        {mobilePanelView === "knowledge" && activeFolderId && (
+          <div className="md:hidden absolute inset-x-0 top-14 bottom-0 z-30 overflow-y-auto bg-[#0d0d0e]">
+            {knowledgePanelEl}
+          </div>
+        )}
+
         {folderOpen && activeFolderId ? (
           <div className="hidden shrink-0 md:block">
-            <FolderSidebar
-              collapsed={sidebarCollapsed}
-              onToggle={() => setSidebarCollapsed((v) => !v)}
-              onNewSpace={handleNewSpace}
-              onNewPrivateSpace={handleNewPrivateSpace}
-              onMembersToggle={() => {
-                setShowMembers((prev) => !prev);
-                setShowKnowledge(false);
-              }}
-              isMembersOpen={showMembers}
-              onKnowledgeToggle={() => {
-                setShowKnowledge((prev) => !prev);
-                setShowMembers(false);
-              }}
-              isKnowledgeOpen={showKnowledge}
-              spaces={filteredSpaces}
-              folderName={activeFolderId === "default" ? defaultFolderName : (activeFolder ? activeFolder.name : "My folder")}
-              folderIconName={activeFolderId === "default" ? defaultFolderIconName : (activeFolder ? activeFolder.iconName : "Folder")}
-              folderThemeColor={activeFolderId === "default" ? defaultFolderThemeColor : (activeFolder ? activeFolder.themeColor : "#a1a1aa")}
-              knowledgeCount={knowledgeItems.filter((k) => (k.folderId || "default") === activeFolderId).length}
-              memberCount={memberCount}
-              activeSpaceId={activeSpaceId}
-              onSelectSpace={(id) => {
-                // Clean up previous unconfigured space if leaving it
-                if (activeSpaceId && activeSpaceId !== id) {
-                  const prevSpace = spaces.find((s) => s.id === activeSpaceId);
-                  if (prevSpace && !prevSpace.isConfigured) {
-                    setSpaces((prev) => prev.filter((s) => s.id !== activeSpaceId));
-                    apiDeleteSpace(activeSpaceId).catch(() => {});
-                  }
-                }
-                setActiveSpaceId(id);
-                setActiveTool(null);
-                const space = spaces.find((s) => s.id === id);
-                if (space && !space.isConfigured) {
-                  if (space.type === "default") {
-                    setShowToolSelector(true);
-                    setShowQuizWizard(false);
-                  } else if (space.type === "quiz") {
-                    setShowQuizWizard(true);
-                    setShowToolSelector(false);
-                  }
-                } else {
-                  setShowToolSelector(false);
-                  setShowQuizWizard(false);
-                }
-              }}
-              onRenameSpace={async (id, newName) => {
-                try {
-                  await apiUpdateSpace(id, { name: newName });
-                } catch (err) {
-                  console.error("Failed to rename space:", err);
-                }
-                setSpaces((prev) =>
-                  prev.map((s) => (s.id === id ? { ...s, name: newName } : s))
-                );
-              }}
-              onDeleteSpace={async (id) => {
-                try {
-                  await apiDeleteSpace(id);
-                } catch (err) {
-                  console.error("Failed to delete space:", err);
-                }
-                setSpaces((prev) => prev.filter((s) => s.id !== id));
-                setActiveSpaceId((curr) => {
-                  if (curr === id) {
-                    setActiveTool(null);
-                    return null;
-                  }
-                  return curr;
-                });
-              }}
-              onMoveSpace={async (id, newCategory) => {
-                setSpaces((prev) =>
-                  prev.map((s) => (s.id === id ? { ...s, category: newCategory } : s))
-                );
-                try {
-                  await apiUpdateSpace(id, { category: newCategory });
-                } catch (err) {
-                  console.error("Failed to move space:", err);
-                  // Revert on failure
-                  setSpaces((prev) =>
-                    prev.map((s) => (s.id === id ? { ...s, category: newCategory === "shared" ? "private" : "shared" } : s))
-                  );
-                }
-              }}
-            />
+            <FolderSidebar {...folderSidebarProps} />
           </div>
         ) : null}
 
         {folderOpen && showMembers ? (
           <div className="hidden shrink-0 md:block">
-            <MembersPanel
-              folderId={activeFolderId || undefined}
-              inviteCode={activeFolder?.inviteCode}
-              ownerId={activeFolder?.ownerId}
-              onClose={() => setShowMembers(false)}
-              onMemberRemoved={() => {
-                // Refresh member count
-                if (activeFolderId && activeFolderId !== "default") {
-                  fetchFolderMembers(activeFolderId)
-                    .then((m) => setMemberCount(m.length))
-                    .catch(() => {});
-                }
-              }}
-            />
+            {membersPanelEl}
           </div>
         ) : null}
 
         {folderOpen && showKnowledge ? (
           <div className="hidden shrink-0 md:block">
-            <KnowledgePanel
-              onClose={() => setShowKnowledge(false)}
-              items={knowledgeItems.filter((k) => (k.folderId || "default") === activeFolderId)}
-              folderId={activeFolderId || undefined}
-              onAddItem={(name, type, assetId, status) => {
-                const newItem: KnowledgeItem = {
-                  id: `k-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
-                  name,
-                  type,
-                  folderId: activeFolderId || "",
-                  status: (status as KnowledgeItem["status"]) || "queued",
-                  assetId,
-                };
-                setKnowledgeItems((prev) => [...prev, newItem]);
-              }}
-              onUpdateItemStatus={(id, status) => {
-                setKnowledgeItems((prev) =>
-                  prev.map((k) => (k.id === id ? { ...k, status } : k))
-                );
-              }}
-              onRefresh={() => {
-                if (activeFolderId) {
-                  fetchKnowledgeItems(activeFolderId).then((items) => {
-                    const mapped: KnowledgeItem[] = items.map((item) => ({
-                      id: item.id,
-                      name: item.asset.name,
-                      type: item.asset.type === "link" ? "link" as const : "file" as const,
-                      folderId: activeFolderId,
-                      status: item.asset.status as KnowledgeItem["status"],
-                      assetId: item.assetId,
-                    }));
-                    setKnowledgeItems((prev) => {
-                      const others = prev.filter((k) => k.folderId !== activeFolderId);
-                      return [...others, ...mapped];
-                    });
-                  }).catch(() => {});
-
-                  // Also re-fetch folders to sync sidebar (handles auto-created "My folder")
-                  fetchFolders().then((apiFolders) => {
-                    const foldersMapped = apiFolders.map((f) => ({
-                      id: f.id, name: f.name, themeName: f.themeName,
-                      themeColor: f.themeColor, iconName: f.iconName, isPublic: f.isPublic, inviteCode: f.inviteCode, ownerId: f.ownerId,
-                    }));
-                    const autoCreated = foldersMapped.find((f) => f.name === "My folder");
-                    if (autoCreated && hasDefaultFolder) {
-                      setHasDefaultFolder(false);
-                      setFolders(foldersMapped);
-                      setActiveFolderId(autoCreated.id);
-                    } else if (foldersMapped.length > 0) {
-                      setFolders(foldersMapped);
-                    }
-                  }).catch(() => {});
-                }
-              }}
-            />
+            {knowledgePanelEl}
           </div>
         ) : null}
 
