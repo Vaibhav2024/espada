@@ -46,7 +46,8 @@ import {
   AlignJustify,
   Underline,
   Strikethrough,
-  MessageCirclePlus
+  MessageCirclePlus,
+  MessageSquare
 } from "lucide-react";
 import { KnowledgeSelectorModal } from "./KnowledgeSelector";
 
@@ -1060,7 +1061,7 @@ export function RecordingView({
       <div className="flex-1 flex flex-col min-w-0 border-r border-border/40 bg-[#0d0d0e] relative h-full">
         
         {/* Workspace Top Header */}
-        <div className="shrink-0 flex items-center justify-between p-6 pb-4 border-b border-border/40 bg-[#0d0d0e] z-10">
+        <div className="hidden md:flex shrink-0 items-center justify-between p-6 pb-4 border-b border-border/40 bg-[#0d0d0e] z-10">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Folder size={14} />
             <span>My folder</span>
@@ -1275,7 +1276,7 @@ export function RecordingView({
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 w-[380px] bg-[#1c1c1f] border border-border rounded-2xl shadow-2xl p-4 z-50 text-left flex flex-col max-h-[300px] overflow-hidden"
+                  className="fixed sm:absolute bottom-[80px] sm:bottom-full mb-3 left-4 sm:left-1/2 right-4 sm:right-auto sm:-translate-x-1/2 w-auto sm:w-[380px] bg-[#1c1c1f] border border-border rounded-2xl shadow-2xl p-4 z-50 text-left flex flex-col max-h-[300px] overflow-hidden"
                 >
                   <div className="flex items-center justify-between border-b border-border/40 pb-2 mb-2.5 shrink-0">
                     <div className="flex items-center gap-2">
@@ -1617,11 +1618,75 @@ export function RecordingView({
         </div>
       )}
 
+      {/* Mobile Floating Action Buttons (visible only on mobile) */}
+      <div className="md:hidden fixed bottom-6 right-6 z-40 flex flex-col gap-3">
+        {/* Visibility Selector Circle Button */}
+        <div className="relative">
+          <button
+            onClick={() => setVisibilityOpen(!visibilityOpen)}
+            className="flex size-11 items-center justify-center rounded-full border border-border bg-[#1c1c1f] text-muted-foreground hover:text-foreground shadow-2xl transition-colors"
+            aria-label="Toggle visibility"
+          >
+            <Globe size={18} />
+          </button>
+          
+          <AnimatePresence>
+            {visibilityOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                className="absolute bottom-full right-0 mb-3 w-[260px] rounded-[18px] border border-border bg-[#1c1c1f] p-4 shadow-3xl z-50 text-left"
+              >
+                <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block mb-3">
+                  Who can access this space?
+                </span>
+                <div className="space-y-2">
+                  {(["me", "members", "public"] as const).map((v) => {
+                    const label = v === "me" ? "Just me" : v === "members" ? "Folder Members" : "Public";
+                    const sub = v === "me" ? "Only you can access" : v === "members" ? "Members in this folder" : "Anyone with link";
+                    return (
+                      <div
+                        key={v}
+                        onClick={() => {
+                          handleToggleVisibility(v);
+                          setVisibilityOpen(false);
+                        }}
+                        className={`flex items-start gap-2.5 rounded-xl border p-2.5 cursor-pointer transition-colors ${
+                          visibility === v ? "border-foreground bg-[#27272a]/40" : "border-border/80 hover:bg-[#27272a]/20"
+                        }`}
+                      >
+                        <div className="flex size-4 items-center justify-center rounded-full border border-muted-foreground shrink-0 mt-0.5">
+                          {visibility === v && <div className="size-1.5 rounded-full bg-foreground" />}
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-foreground block">{label}</span>
+                          <span className="text-[9px] text-muted-foreground block mt-0.5">{sub}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Chat Toggle Circle Button */}
+        <button
+          onClick={() => setChatCollapsed(!chatCollapsed)}
+          className="flex size-11 items-center justify-center rounded-full border border-border bg-[#1c1c1f] text-muted-foreground hover:text-foreground shadow-2xl transition-colors"
+          aria-label="Toggle chat"
+        >
+          <MessageSquare size={18} />
+        </button>
+      </div>
+
       {/* COLLAPSED RIGHT CHAT TRIGGER */}
       {chatCollapsed && (
         <button
           onClick={() => setChatCollapsed(false)}
-          className="absolute right-4 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-[#1c1c1f] border border-border text-muted-foreground hover:text-foreground hover:bg-[#27272a] shadow-xl transition-all duration-150 z-40 cursor-pointer"
+          className="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-[#1c1c1f] border border-border text-muted-foreground hover:text-foreground hover:bg-[#27272a] shadow-xl transition-all duration-150 z-40 cursor-pointer"
           title="Open chat"
         >
           <ChevronsLeft size={16} />

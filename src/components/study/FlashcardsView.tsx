@@ -351,24 +351,24 @@ export function FlashcardsView({
             </div>
 
             {/* Player Controls */}
-            <div className="mt-8 flex items-center justify-center gap-3">
+            <div className="mt-8 flex w-full items-center justify-center gap-2 sm:gap-3">
               <button
                 onClick={() => advance(false)}
-                className="inline-flex items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/10 hover:bg-destructive/20 px-6 py-3 text-sm font-semibold text-foreground transition-colors"
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-destructive/40 bg-destructive/10 hover:bg-destructive/20 px-2 sm:px-6 py-3 text-xs sm:text-sm font-semibold text-foreground transition-colors whitespace-nowrap"
               >
-                <X size={15} /> Don&#39;t know
+                <X size={14} /> Don&#39;t know
               </button>
               <button
                 onClick={() => setFlipped((f) => !f)}
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-[#1c1c1f] hover:bg-[#27272a] px-5 py-3 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-[#1c1c1f] hover:bg-[#27272a] px-2 sm:px-5 py-3 text-xs sm:text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
               >
-                <RotateCcw size={14} /> Flip
+                <RotateCcw size={13} /> Flip
               </button>
               <button
                 onClick={() => advance(true)}
-                className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 px-6 py-3 text-sm font-semibold text-emerald-400 transition-colors"
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 sm:px-6 py-3 text-xs sm:text-sm font-semibold text-emerald-400 transition-colors whitespace-nowrap"
               >
-                <Check size={15} /> Know
+                <Check size={14} /> Know
               </button>
             </div>
           </div>
@@ -421,7 +421,7 @@ export function FlashcardsView({
   return (
     <div className="flex flex-col bg-[#0c0c0d] h-full w-full select-none text-left">
       {/* ── TOP BREADCRUMB ── */}
-      <div className="shrink-0 flex items-center justify-between px-8 py-4">
+      <div className="hidden md:flex shrink-0 items-center justify-between px-8 py-4">
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Folder size={13} className="shrink-0"/>
           <span>My folder</span>
@@ -762,6 +762,61 @@ export function FlashcardsView({
         </AnimatePresence>,
         document.body
       )}
+
+      {/* Mobile Floating Action Buttons (visible only on mobile) */}
+      <div className="md:hidden fixed bottom-6 right-6 z-40 flex flex-col gap-3">
+        {/* Visibility Selector Circle Button */}
+        <div className="relative">
+          <button
+            onClick={() => setVisOpen(!visOpen)}
+            className="flex size-11 items-center justify-center rounded-full border border-border bg-[#1c1c1f] text-muted-foreground hover:text-foreground shadow-2xl transition-colors"
+            aria-label="Toggle visibility"
+          >
+            <Globe size={18} />
+          </button>
+          
+          <AnimatePresence>
+            {visOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                className="absolute bottom-full right-0 mb-3 w-[260px] rounded-[18px] border border-border bg-[#1c1c1f] p-4 shadow-3xl z-50 text-left"
+              >
+                <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block mb-3">
+                  Who can access this space?
+                </span>
+                <div className="space-y-2">
+                  {(["me", "members", "public"] as const).map((v) => {
+                    const label = v === "me" ? "Just me" : v === "members" ? "Folder Members" : "Public";
+                    const sub = v === "me" ? "Only you can access" : v === "members" ? "Members in this folder" : "Anyone with link";
+                    return (
+                      <div
+                        key={v}
+                        onClick={() => {
+                          handleSetVisibility(v);
+                          setVisOpen(false);
+                        }}
+                        className={`flex items-start gap-2.5 rounded-xl border p-2.5 cursor-pointer transition-colors ${
+                          visibility === v ? "border-foreground bg-[#27272a]/40" : "border-border/80 hover:bg-[#27272a]/20"
+                        }`}
+                      >
+                        <div className="flex size-4 items-center justify-center rounded-full border border-muted-foreground shrink-0 mt-0.5">
+                          {visibility === v && <div className="size-1.5 rounded-full bg-foreground" />}
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-foreground block">{label}</span>
+                          <span className="text-[9px] text-muted-foreground block mt-0.5">{sub}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
 
       <KnowledgeSelectorModal
         isOpen={knowledgeOpen}
