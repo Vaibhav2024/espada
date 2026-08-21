@@ -223,7 +223,8 @@ export function RecordingView({
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
-      if (visibilityRef.current && !visibilityRef.current.contains(target)) {
+      const isVisibilityClick = (target as HTMLElement).closest(".visibility-selector-container");
+      if (!isVisibilityClick && visibilityRef.current && !visibilityRef.current.contains(target)) {
         setVisibilityOpen(false);
       }
       if (chatUploadRef.current && !chatUploadRef.current.contains(target)) {
@@ -1619,9 +1620,9 @@ export function RecordingView({
       )}
 
       {/* Mobile Floating Action Buttons (visible only on mobile) */}
-      <div className="md:hidden fixed bottom-6 right-6 z-40 flex flex-col gap-3">
+      <div className={`md:hidden fixed bottom-6 right-6 z-40 flex flex-col gap-3 ${!chatCollapsed ? "hidden" : ""}`}>
         {/* Visibility Selector Circle Button */}
-        <div className="relative">
+        <div className="relative visibility-selector-container">
           <button
             onClick={() => setVisibilityOpen(!visibilityOpen)}
             className="flex size-11 items-center justify-center rounded-full border border-border bg-[#1c1c1f] text-muted-foreground hover:text-foreground shadow-2xl transition-colors"

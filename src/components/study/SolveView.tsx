@@ -132,8 +132,6 @@ export function SolveView({
 
   // Collapsible Chat State
   const [chatCollapsed, setChatCollapsed] = useState(true);
-  // Mobile tab toggle: 'solve' shows main content, 'chat' shows the side chat panel
-  const [mobileTab, setMobileTab] = useState<"solve" | "chat">("solve");
   const [problemsSidebarOpen, setProblemsSidebarOpen] = useState(false);
   
   // Problems database state
@@ -216,7 +214,8 @@ export function SolveView({
       if (addMenuRef.current && !addMenuRef.current.contains(event.target as Node)) {
         setAddMenuOpen(false);
       }
-      if (visibilityRef.current && !visibilityRef.current.contains(event.target as Node)) {
+      const isVisibilityClick = (event.target as HTMLElement).closest(".visibility-selector-container");
+      if (!isVisibilityClick && visibilityRef.current && !visibilityRef.current.contains(event.target as Node)) {
         setVisibilityOpen(false);
       }
       if (chatUploadRef.current && !chatUploadRef.current.contains(event.target as Node)) {
@@ -769,25 +768,7 @@ export function SolveView({
 
   return (
     <div className="flex flex-col bg-[#0c0c0d] h-full w-full select-none text-left overflow-hidden">
-      {/* Mobile tab bar (hidden on md+) */}
-      <div className="md:hidden flex shrink-0 border-b border-border/40 bg-[#131315]/50">
-        <button
-          onClick={() => setMobileTab("solve")}
-          className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors ${
-            mobileTab === "solve" ? "text-foreground border-b-2 border-foreground" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Solve
-        </button>
-        <button
-          onClick={() => setMobileTab("chat")}
-          className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors ${
-            mobileTab === "chat" ? "text-foreground border-b-2 border-foreground" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Chat
-        </button>
-      </div>
+
       <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* Backdrop for problems list sidebar on mobile */}
       {problemsSidebarOpen && (
@@ -799,8 +780,7 @@ export function SolveView({
 
       {/* ── LEFT SIDEBAR (PROBLEMS LIST) ── */}
       <div className={`
-        ${mobileTab === "chat" ? "hidden md:flex" : "flex"}
-        fixed md:relative top-0 bottom-0 left-0 z-40 w-[240px] md:w-[220px] h-full md:h-auto border-r border-border/40 flex-col bg-[#131315] shadow-2xl md:shadow-none transition-transform duration-200
+        fixed md:relative top-0 bottom-0 left-0 z-40 w-[240px] md:w-[220px] h-full md:h-auto border-r border-border/40 flex flex-col bg-[#131315] shadow-2xl md:shadow-none transition-transform duration-200
         ${problemsSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
       `}>
         <div className="p-4 border-b border-border/20 flex items-center justify-between">
@@ -1009,12 +989,25 @@ export function SolveView({
 
       {/* ── RIGHT PANEL (ESPADA CHAT PANEL) ── */}
       {!chatCollapsed && (
-        <div className={`w-full md:w-[300px] shrink-0 flex flex-col bg-[#131315]/30 border-l border-border/40 ${
-          mobileTab === "chat" ? "flex" : "hidden md:flex"
-        }`}>
-          <div className="p-4 border-b border-border/20 flex items-center justify-between bg-[#131315]/40">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Chat with Espada</span>
-          </div>
+        <>
+          {/* Mobile backdrop overlay to close when clicking outside */}
+          <div
+            className="md:hidden fixed inset-0 bg-black/60 z-30 animate-in fade-in duration-200"
+            onClick={() => setChatCollapsed(true)}
+          />
+          <div
+            className="fixed inset-y-0 right-0 z-40 w-full md:relative md:inset-auto md:z-auto h-full bg-[#151517] border-l border-border/40 flex flex-col overflow-hidden animate-in slide-in-from-right duration-250 shrink-0"
+          >
+            <div className="p-4 border-b border-border/20 flex items-center justify-between bg-[#131315]/40">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Chat with Espada</span>
+              <button
+                onClick={() => setChatCollapsed(true)}
+                className="p-1 rounded-lg text-muted-foreground hover:bg-[#27272a] hover:text-foreground transition-all cursor-pointer border-none bg-transparent"
+                title="Collapse chat"
+              >
+                <X size={16} />
+              </button>
+            </div>
 
           {/* Chat message threads */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -1242,14 +1235,15 @@ export function SolveView({
                 </button>
               </div>
             </div>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       </div>{/* end flex-1 overflow-hidden row */}
 
       {/* Mobile Floating Action Buttons (visible only on mobile) */}
-      <div className="md:hidden fixed bottom-6 right-6 z-40 flex flex-col gap-3">
+      <div className={`md:hidden fixed bottom-6 right-6 z-40 flex flex-col gap-3 ${!chatCollapsed ? "hidden" : ""}`}>
         {/* Problems List Toggle Circle Button */}
         <button
           onClick={() => setProblemsSidebarOpen(!problemsSidebarOpen)}
@@ -1260,7 +1254,7 @@ export function SolveView({
         </button>
 
         {/* Visibility Selector Circle Button */}
-        <div className="relative">
+        <div className="relative visibility-selector-container">
           <button
             onClick={() => setVisibilityOpen(!visibilityOpen)}
             className="flex size-11 items-center justify-center rounded-full border border-border bg-[#1c1c1f] text-muted-foreground hover:text-foreground shadow-2xl transition-colors"
