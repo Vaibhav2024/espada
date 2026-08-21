@@ -1,10 +1,9 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
   "/api/folders/[folderId]/knowledge/route": "app/api/folders/[folderId]/knowledge/route.js",
-  "/api/folders/[folderId]/members/route": "app/api/folders/[folderId]/members/route.js",
   "/api/folders/[folderId]/spaces/route": "app/api/folders/[folderId]/spaces/route.js",
   "/api/folders/route": "app/api/folders/route.js",
+  "/api/generate/solve/route": "app/api/generate/solve/route.js",
   "/api/me/route": "app/api/me/route.js",
-  "/api/spaces/[spaceId]/route": "app/api/spaces/[spaceId]/route.js",
   "/dashboard/page": "app/dashboard/page.js"
 }

@@ -131,9 +131,10 @@ export function SolveView({
   const [deleteProblemId, setDeleteProblemId] = useState<string | null>(null);
 
   // Collapsible Chat State
-  const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [chatCollapsed, setChatCollapsed] = useState(true);
   // Mobile tab toggle: 'solve' shows main content, 'chat' shows the side chat panel
   const [mobileTab, setMobileTab] = useState<"solve" | "chat">("solve");
+  const [problemsSidebarOpen, setProblemsSidebarOpen] = useState(false);
   
   // Problems database state
   const [problems, setProblems] = useState<SolveProblem[]>([]);
@@ -158,6 +159,9 @@ export function SolveView({
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
+    if (typeof window !== "undefined" && window.innerWidth >= 768) {
+      setChatCollapsed(false);
+    }
   }, []);
 
   // Load existing problems from DB on mount
@@ -785,10 +789,20 @@ export function SolveView({
         </button>
       </div>
       <div className="flex flex-1 min-h-0 overflow-hidden">
+      {/* Backdrop for problems list sidebar on mobile */}
+      {problemsSidebarOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-30 bg-black/60 backdrop-blur-sm"
+          onClick={() => setProblemsSidebarOpen(false)}
+        />
+      )}
+
       {/* ── LEFT SIDEBAR (PROBLEMS LIST) ── */}
-      <div className={`w-[220px] shrink-0 border-r border-border/40 flex flex-col bg-[#131315]/50 ${
-        mobileTab === "chat" ? "hidden md:flex" : "flex"
-      }`}>
+      <div className={`
+        ${mobileTab === "chat" ? "hidden md:flex" : "flex"}
+        fixed md:relative top-0 bottom-0 left-0 z-40 w-[240px] md:w-[220px] h-full md:h-auto border-r border-border/40 flex-col bg-[#131315] shadow-2xl md:shadow-none transition-transform duration-200
+        ${problemsSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
+      `}>
         <div className="p-4 border-b border-border/20 flex items-center justify-between">
           <span className="text-xs font-bold text-foreground/80 uppercase tracking-wider">Problems</span>
           <button
@@ -803,7 +817,10 @@ export function SolveView({
           {problems.map((prob, idx) => (
             <button
               key={prob.id}
-              onClick={() => setActiveProblemId(prob.id)}
+              onClick={() => {
+                setActiveProblemId(prob.id);
+                setProblemsSidebarOpen(false);
+              }}
               onContextMenu={(e) => handleProblemContextMenu(e, prob.id)}
               className={`w-full text-left rounded-xl px-3 py-2 text-xs font-semibold transition-all relative ${
                 activeProblem?.id === prob.id
@@ -820,13 +837,20 @@ export function SolveView({
       {/* ── CENTER WORKSPACE (ACTIVE PROBLEM DETAIL) ── */}
       <div className="flex-1 flex flex-col min-w-0 border-r border-border/40 bg-[#0c0c0d]">
         {/* Top Header */}
-        <div className="shrink-0 flex items-center justify-between px-8 py-4 border-b border-border/20 bg-[#0c0c0d]">
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Folder size={13} />
-            <span>My folder</span>
-            <ChevronRight size={12} />
-            <FileText size={13} />
-            <span className="font-semibold text-foreground truncate max-w-[300px]">{spaceName}</span>
+        <div className="shrink-0 flex items-center justify-between px-6 py-4 border-b border-border/20 bg-[#0c0c0d]">
+          <div className="flex items-center gap-1.5 text-sm text-muted-foreground min-w-0">
+            <button
+              onClick={() => setProblemsSidebarOpen((v) => !v)}
+              className="md:hidden p-1 mr-1 rounded-lg text-muted-foreground hover:bg-[#27272a]/60 hover:text-foreground transition-colors shrink-0"
+              aria-label="Toggle problems"
+            >
+              <Menu size={16} />
+            </button>
+            <Folder size={13} className="hidden sm:inline shrink-0" />
+            <span className="hidden sm:inline">My folder</span>
+            <ChevronRight size={12} className="hidden sm:inline shrink-0" />
+            <FileText size={13} className="shrink-0" />
+            <span className="font-semibold text-foreground truncate max-w-[150px] sm:max-w-[300px]">{spaceName}</span>
           </div>
           <div className="flex items-center gap-4">
             {/* Visibility Selector */}

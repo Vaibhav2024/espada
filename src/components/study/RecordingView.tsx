@@ -130,6 +130,9 @@ export function RecordingView({
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
+    if (typeof window !== "undefined" && window.innerWidth >= 768) {
+      setChatCollapsed(false);
+    }
   }, []);
 
   // Recording State & Variables
@@ -187,7 +190,7 @@ export function RecordingView({
   const [visibility, setVisibility] = useState(initialVisibility);
   const [visibilityOpen, setVisibilityOpen] = useState(false);
   const [chatWidth, setChatWidth] = useState(420);
-  const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [chatCollapsed, setChatCollapsed] = useState(true);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -1388,17 +1391,25 @@ export function RecordingView({
       {!chatCollapsed && (
         <div
           onMouseDown={handleMouseDown}
-          className={`w-[3px] hover:w-[6px] cursor-col-resize self-stretch transition-all bg-border/60 hover:bg-primary z-45 ${
+          className={`hidden md:block w-[3px] hover:w-[6px] cursor-col-resize self-stretch transition-all bg-border/60 hover:bg-primary z-45 ${
             isDragging ? "bg-primary w-[6px]" : ""
           }`}
+        />
+      )}
+
+      {/* Backdrop for mobile */}
+      {!chatCollapsed && (
+        <div
+          className="md:hidden fixed inset-0 z-30 bg-black/60 backdrop-blur-sm"
+          onClick={() => setChatCollapsed(true)}
         />
       )}
 
       {/* ── RIGHT PANEL (ESPADA CHAT PANEL) ── */}
       {!chatCollapsed && (
         <div
-          style={{ width: chatWidth }}
-          className="h-full bg-[#151517] border-l border-border/40 flex flex-col overflow-hidden animate-in slide-in-from-right duration-250 shrink-0"
+          style={typeof window !== "undefined" && window.innerWidth >= 768 ? { width: chatWidth } : undefined}
+          className="fixed inset-y-0 right-0 z-40 w-full md:relative md:inset-auto md:z-auto h-full bg-[#151517] border-l border-border/40 flex flex-col overflow-hidden animate-in slide-in-from-right duration-250 shrink-0"
         >
           <div className="flex items-center px-4 py-3 border-b border-border/40 shrink-0">
             <button
